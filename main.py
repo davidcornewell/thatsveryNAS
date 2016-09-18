@@ -2,6 +2,9 @@
 import MySQLdb
 import config
 import argparse
+import os
+import re
+import hashlib
 
 class ThatsVeryNAS:
     def __init__(self, config):
@@ -52,9 +55,54 @@ class ThatsVeryNAS:
             self.dbc.execute(self.addpattern_stored, (pattern,path_id))
             self.db.commit()
 
+    def AddFile(self, path_id, filename, full_filename):
+        BLOCKSIZE = 65536
+        hasher = hashlib.sha256()
+        with open(full_filename, 'rb') as afile:
+            buf = afile.read(BLOCKSIZE)
+            while len(buf) > 0:
+                hasher.update(buf)
+                buf = afile.read(BLOCKSIZE)
+        file_hash = hasher.hexdigest()
+
+        self.dbc.execute("""INSERT INTO files
+                SET file_hash=UNHEX(%s), path_id=%s, filename=%s""", (file_hash, path_id, filename))
+        self.db.commit()
+
+    def ScanPath(self,path_id):
+        # open a log file for skipped files if configured
+        if (config.skipfilelog):
+            fskipped = open(config.skipfilelog, 'a')
+
+        # Get given path or all paths
+        if (path_id>0):
+            self.dbc.execute("SELECT path FROM paths WHERE path_id=%s",(path_id))
+        else:
+            self.dbc.execute("SELECT path_id,path FROM paths")
+        paths=self.dbc.fetchall()
+        for path_id,path in paths:
+            print "%s, %s" %(path_id, path)
+            # Get exclusions for the path as well as exclusions for all paths
+            self.dbc.execute("SELECT pattern FROM exclusions WHERE path_id IN (0,%s)", {path_id})
+            patterns=self.dbc.fetchall()
+
+            for root, dirs, files in os.walk(path):
+                for file in files:
+                    skip=False
+                    full_filename=os.path.join(root, file)
+                    rel_filename=full_filename[len(path):]
+                    for pattern in patterns:
+                        if (re.match("%s" %(pattern), "%s" %(rel_filename)) != None):
+                            skip=True
+                            break
+                    if (skip==False):
+                        self.AddFile(path_id, rel_filename, full_filename)
+                    elif (fskipped):
+                        fskipped.write("Skipping: %s\n" %full_filename)
+
     def PrintInfo(self):
         self.dbc.execute("""SELECT
-                p.path,GROUP_CONCAT(e.pattern),COUNT(f.file_hash)
+                p.path,GROUP_CONCAT(DISTINCT e.pattern),COUNT(f.file_hash)
                 FROM paths p
                 LEFT JOIN exclusions e ON e.path_id=p.path_id
                 LEFT JOIN files f ON f.path_id=p.path_id
@@ -77,6 +125,7 @@ parser.add_argument('--info', '-i', action="store_true", help='Displays info on 
 parser.add_argument('--addpath', '-p', action="store_true", help='adds a path to look for files')
 parser.add_argument('--addexclusion_pattern', '-e',
 action="store_true",help='adds an exlusion to ignore when scanning all paths')
+parser.add_argument('--scan', '-s', action="store_true", help='Scan path(s) and index file')
 
 args = parser.parse_args()
 
@@ -92,6 +141,9 @@ if (args.addexclusion_pattern):
     print "Enter exclusion for %d (regex):" %path_id,
     addexclusion = raw_input();
     nas.AddExclusionPattern(addexclusion,path_id)
+
+if (args.scan):
+    nas.ScanPath(path_id)
 
 if (args.info):
     nas.PrintInfo()
