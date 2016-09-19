@@ -66,7 +66,8 @@ class ThatsVeryNAS:
         file_hash = hasher.hexdigest()
 
         self.dbc.execute("""INSERT INTO files
-                SET file_hash=UNHEX(%s), path_id=%s, filename=%s""", (file_hash, path_id, filename))
+                SET file_hash=UNHEX(%s), path_id=%s, filename=%s
+                ON DUPLICATE KEY UPDATE file_hash=file_hash""", (file_hash, path_id, filename))
         self.db.commit()
 
     def ScanPath(self,path_id):
