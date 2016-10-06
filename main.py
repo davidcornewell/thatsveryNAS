@@ -65,9 +65,24 @@ class ThatsVeryNAS:
                 buf = afile.read(BLOCKSIZE)
         file_hash = hasher.hexdigest()
 
+        # If the filename exists but the file hash is different we need
+        # to change the status on it to indicate the file exists but as a
+        # different hash
+        self.dbc.execute("""SELECT HEX(file_hash) FROM files
+                WHERE path_id=%s AND filename=%s AND file_hash!=UNHEX(%s)""",
+                (path_id, filename, file_hash))
+        if (self.dbc.rowcount > 0):
+            row=self.dbc.fetchone()
+            print "UPDATING file: %s (%s != %s)" %(filename, file_hash, row[0])
+            self.dbc.execute("""UPDATE files SET status='UPDATED' WHERE
+                    file_hash=UNHEX(%s)""", {row[0]})
+
+        # Insert the file. if the hash exists, update path and filename just in
+        # case it moved
         self.dbc.execute("""INSERT INTO files
                 SET file_hash=UNHEX(%s), path_id=%s, filename=%s
-                ON DUPLICATE KEY UPDATE file_hash=file_hash""", (file_hash, path_id, filename))
+                ON DUPLICATE KEY UPDATE path_id=%s, filename=%s""",
+                (file_hash, path_id, filename, path_id, filename))
         self.db.commit()
 
     def ScanPath(self,path_id):
