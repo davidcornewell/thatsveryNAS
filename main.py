@@ -1,8 +1,9 @@
-#!/usr/bin/python
+#!/usr/bin/python2.7
 import MySQLdb
 import config
 import argparse
 import os
+import errno
 import re
 import hashlib
 
@@ -65,6 +66,9 @@ class ThatsVeryNAS:
                 buf = afile.read(BLOCKSIZE)
         file_hash = hasher.hexdigest()
 
+        if (config.updatefilelog):
+            fupdated = open(config.updatefilelog, 'a')
+
         # If the filename exists but the file hash is different we need
         # to change the status on it to indicate the file exists but as a
         # different hash
@@ -73,7 +77,9 @@ class ThatsVeryNAS:
                 (path_id, filename, file_hash))
         if (self.dbc.rowcount > 0):
             row=self.dbc.fetchone()
-            print "UPDATING file: %s (%s != %s)" %(filename, file_hash, row[0])
+            if (fupdated):
+                fupdated.write("UPDATING file: %s (%s != %s)\n" %(filename,
+                    file_hash, row[0]))
             self.dbc.execute("""UPDATE files SET status='UPDATED' WHERE
                     file_hash=UNHEX(%s)""", {row[0]})
 
@@ -88,6 +94,13 @@ class ThatsVeryNAS:
     def ScanPath(self,path_id):
         # open a log file for skipped files if configured
         if (config.skipfilelog):
+            if not os.path.exists(os.path.dirname(config.skipfilelog)):
+                try:
+                    os.makedirs(os.path.dirname(config.skipfilelog))
+                except OSError as exc: # Guard against race condition
+                    if exc.errno != errno.EEXIST:
+                        raise
+
             fskipped = open(config.skipfilelog, 'a')
 
         # Get given path or all paths
@@ -97,7 +110,7 @@ class ThatsVeryNAS:
             self.dbc.execute("SELECT path_id,path FROM paths")
         paths=self.dbc.fetchall()
         for path_id,path in paths:
-            print "%s, %s" %(path_id, path)
+            print("%s, %s" %(path_id, path))
             # Get exclusions for the path as well as exclusions for all paths
             self.dbc.execute("SELECT pattern FROM exclusions WHERE path_id IN (0,%s)", {path_id})
             patterns=self.dbc.fetchall()
@@ -125,7 +138,7 @@ class ThatsVeryNAS:
                 GROUP BY p.path_id""")
         data = self.dbc.fetchall()
         for row in data :
-            print "%s\n%s\n%s" %(row[0], row[1], row[2])
+            print("%s\n%s\n%s" %(row[0], row[1], row[2]))
 
     def __del__(self):
         self.dbc.close()
@@ -147,14 +160,14 @@ args = parser.parse_args()
 
 path_id=0
 if (args.addpath):
-    print "Enter path:",
+    print("Enter path:")
     addpath=raw_input()
     path_id=nas.AddPath(addpath)
     if (path_id>0):
-        print "Path is ID: %d" %path_id
+        print("Path is ID: %d" %path_id)
 
 if (args.addexclusion_pattern):
-    print "Enter exclusion for %d (regex):" %path_id,
+    print("Enter exclusion for %d (regex):" %path_id)
     addexclusion = raw_input();
     nas.AddExclusionPattern(addexclusion,path_id)
 
