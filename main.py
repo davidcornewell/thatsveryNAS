@@ -147,32 +147,33 @@ class ThatsVeryNAS:
 #
 # Main execution
 #
-nas = ThatsVeryNAS(config)
+if __name__ == '__main__':
+    nas = ThatsVeryNAS(config)
 
-parser = argparse.ArgumentParser(description='Manage your nice NAS.')
-parser.add_argument('--info', '-i', action="store_true", help='Displays info on config and files')
-parser.add_argument('--addpath', '-p', action="store_true", help='adds a path to look for files')
-parser.add_argument('--addexclusion_pattern', '-e',
-action="store_true",help='adds an exlusion to ignore when scanning all paths')
-parser.add_argument('--scan', '-s', action="store_true", help='Scan path(s) and index file')
+    parser = argparse.ArgumentParser(description='Manage your nice NAS.')
+    parser.add_argument('--info', '-i', action="store_true", help='Displays info on config and files')
+    parser.add_argument('--addpath', '-p', action="store_true", help='adds a path to look for files')
+    parser.add_argument('--addexclusion_pattern', '-e',
+    action="store_true",help='adds an exlusion to ignore when scanning all paths')
+    parser.add_argument('--scan', '-s', action="store_true", help='Scan path(s) and index file')
 
-args = parser.parse_args()
+    args = parser.parse_args()
 
-path_id=0
-if (args.addpath):
-    print("Enter path:")
-    addpath=raw_input()
-    path_id=nas.AddPath(addpath)
-    if (path_id>0):
-        print("Path is ID: %d" %path_id)
+    path_id=0
+    if (args.addpath):
+        print("Enter path:")
+        addpath=raw_input()
+        path_id=nas.AddPath(addpath)
+        if (path_id>0):
+            print("Path is ID: %d" %path_id)
 
-if (args.addexclusion_pattern):
-    print("Enter exclusion for %d (regex):" %path_id)
-    addexclusion = raw_input();
-    nas.AddExclusionPattern(addexclusion,path_id)
+    if (args.addexclusion_pattern):
+        print("Enter exclusion for %d (regex):" %path_id)
+        addexclusion = raw_input();
+        nas.AddExclusionPattern(addexclusion,path_id)
 
-if (args.scan):
-    nas.ScanPath(path_id)
+    if (args.scan):
+        nas.ScanPath(path_id)
 
-if (args.info):
-    nas.PrintInfo()
+    if (args.info):
+        nas.PrintInfo()
