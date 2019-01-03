@@ -1,0 +1,909 @@
+/* WC DATAVIS STYLES */
+
+.wcdv_button {
+	cursor: pointer;
+	vertical-align: middle;
+}
+
+button.wcdv_icon_button {
+	cursor: pointer;
+}
+
+button.wcdv_icon_button,
+.wcdv_spinner {
+	border: none;
+	background-color: inherit;
+	padding: 0;
+	vertical-align: middle;
+}
+
+button.wcdv_button_left {
+	margin-left: 0.5em;
+}
+
+button.wcdv_icon_button span.fa {
+	cursor: pointer;
+	/*font-size: 120%;*/
+	font-size: 16px;
+}
+
+.wcdv_grid button > span.fa,
+.wcdv_graph button > span.fa,
+.wcdv_spinner > span.fa {
+	margin-right: 0.25em;
+}
+
+li.wcdv_aggregate_field:first-child {
+	padding-top: 0.5ex;
+}
+
+li.wcdv_aggregate_field {
+	padding-top: 0.25ex;
+	padding-bottom: 0.25ex;
+}
+
+button.wcdv_expand_button {
+	display: inline-block;
+	vertical-align: middle;
+}
+
+button.wcdv_expand_button > span.fa {
+	cursor: pointer;
+	margin-right: inherit;
+	font-size: 13px;
+	color: #737373;
+}
+
+.wcdv_grid, .wcdv_graph {
+	background-color: white;
+	margin-top: 1em;
+	display: flex;
+	flex-direction: column;
+}
+
+.wcdv_grid:first-of-type {
+	margin-top: 0;
+}
+
+.wcdv_warning_banner {
+	border-left: solid 8px #bf311a;
+    padding: 4px;
+    margin-bottom: 4px;
+    background-color: #fadfdb;
+}
+
+/******************************************************************************/
+
+.wcdv_grid_titlebar {
+	border: 1px solid #c7c7c7;
+	padding: 0 0 0 8px;
+        cursor: pointer;
+	color: #737373;
+	flex: 0 0 auto;
+}
+
+.wcdv_grid_titlebar strong {
+	font-size: 1em;
+	line-height: 30px;
+}
+
+.wcdv_grid_titlebar .headingInfo {
+	cursor: default;
+	font-size: 0.9em;
+	line-height: 30px;
+}
+
+.wcdv_grid_titlebar .wcdv_spinner{
+	color: #737373
+}
+
+.wcdv_grid_titlebar .link {
+	cursor: pointer;
+}
+
+.wcdv_grid_titlebar .link:hover {
+	text-decoration: underline;
+}
+
+.wcdv_grid_titlebar .showhide {
+	background-color: transparent;
+	border: 0;
+	cursor: pointer;
+	padding: 0;
+}
+
+.wcdv_titlebar_controls span.fa {
+	cursor: pointer;
+	width: 30px;
+	text-align: center;
+	line-height: 30px;
+	user-select: none;
+}
+
+.wcdv_titlebar_controls span.fa:last-child {
+	margin-right: 0;
+}
+
+/*
+.wcdv_grid_titlebar .showhide:focus,
+.wcdv_grid_titlebar .showhide:hover,
+.wcdv_grid_titlebar .showhide:active {
+	color: white;
+}
+*/
+
+/******************************************************************************/
+
+.wcdv_grid_content {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	border: 1px solid #c7c7c7;
+    border-top: none;
+}
+
+/******************************************************************************/
+
+.wcdv_grid_toolbar {
+	border-bottom: 1px solid #c7c7c7;
+	padding: 0 4px;
+	flex: 0 0 auto;
+	font-size: 0.70em;
+	padding: 0 8px;
+}
+
+.wcdv_grid_toolbar button,
+.wcdv_grid_toolbar label,
+.wcdv_grid_toolbar .wcdv_button,
+.wcdv_grid_toolbar input {
+	margin-left: 0.5em;
+}
+
+.wcdv_grid_toolbar button:first-child,
+.wcdv_grid_toolbar label:first-child,
+.wcdv_grid_toolbar .wcdv_button:first-child,
+.wcdv_grid_toolbar input:first-child {
+	margin-left: 0;
+}
+
+.wcdv_grid_toolbar > span.fa {
+	color: #888;
+	font-size: 14px;
+}
+.wcdv_grid_toolbar > span.fa:hover {
+	color: #444;
+}
+
+.wcdv_grid_toolbar button .fa {
+	font-size: 1.15em;
+	padding-right: 3px;
+}
+.wcdv_grid_toolbar button[disabled=disabled] .fa {
+	color: #c7c7c77a;
+	cursor: not-allowed;
+}
+
+.wcdv_grid_toolbar .wcdv_button.pull-right {
+	padding-right: 0.5em;
+}
+
+.wcdv_toolbar_section:first-child {
+	padding-left: 0px;
+	border-left: none;
+}
+
+.wcdv_toolbar_section {
+	display: inline-block;
+	margin-right: 8px;
+	vertical-align: middle;
+	border-left: 1px solid #c7c7c7;
+	padding: 4px 4px 4px 12px;
+}
+
+.wcdv_toolbar_section input{
+	vertical-align: middle;
+}
+
+.wcdv_toolbar_section input[type="radio"] {
+	margin-top: -1px;
+}
+
+.wcdv_toolbar_view select{
+	margin-left: 0.5em;
+}
+
+.wcdv_toolbar_view .wcdv_icon_button span{
+	margin: 0 !important;
+	padding: 0;
+}
+
+.wcdv_grid_toolbar span.fa.wcdv_info_icon {
+	color: #737373;
+	margin-left: 0.5em;
+}
+
+/******************************************************************************/
+
+.wcdv_grid_control {
+	background-color: #FFF;
+	border-bottom: 1px solid #c7c7c7;
+	font-size: 0.70em;
+	padding: 0 8px;
+	display: flex;
+    flex-shrink: 0;
+
+	/*
+	 * Flexible display of group/filter/pivot controls.
+	 */
+	/*
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	*/
+}
+
+/*
+.wcdv_group_control,
+.wcdv_pivot_control {
+	font-size: 0.85em;
+}
+*/
+
+.wcdv_control_title_bar {
+	display: flex;
+	border-bottom: 1px solid #737373;
+}
+
+.wcdv_control_title {
+	color: #737373;
+	text-transform: uppercase;
+	font-weight: bold;
+	display: inline-block;
+	flex: 1 1 auto;
+}
+
+.wcdv_control_clear_button {
+	margin-left: 10px;
+	flex: none;
+	line-height: 15px;
+    font-size: 16px !important;
+}
+
+.wcdv_group_control > div > ul,
+.wcdv_filter_control > div > ul,
+.wcdv_pivot_control > div > ul,
+.wcdv_aggregate_control > div > ul {
+	list-style-type: none;
+	padding: 0px;
+	margin-top: 1ex;
+	margin-bottom: 1ex;
+	width: 100%;
+}
+
+.wcdv_group_control,
+.wcdv_filter_control,
+.wcdv_pivot_control,
+.wcdv_aggregate_control {
+	border-right: 1px solid #c7c7c7;
+	background-color: #FFF;
+	padding: 10px 8px;
+	display: inline-block;
+	vertical-align: top;
+	min-width: 122px;
+}
+
+.wcdv_filter_control{
+	padding-left: 0;
+}
+
+/* HORIZONTAL CONTROLS */
+
+.wcdv_group_control ul li,
+.wcdv_pivot_control ul li {
+	display: inline-block;
+}
+
+/*
+ * These are the little arrows that show the relationship between group & pivot fields like this:
+ * [field] → [field] → [field].  Since these are horizontal lists, the arrows are actually placed at
+ * the beginning of every <LI>, we just use CSS to hide the first one so they appear to be between
+ * field elements.
+ */
+
+.wcdv_group_control ul > li:first-child > span.fa,
+.wcdv_pivot_control ul > li:first-child > span.fa {
+	display: none;
+}
+
+.wcdv_group_control ul li > span.fa,
+.wcdv_pivot_control ul li > span.fa {
+	margin-right: 4px;
+}
+
+/*
+ * These are the fields themselves.
+ */
+
+.wcdv_group_control ul li .wcdv_field,
+.wcdv_pivot_control ul li .wcdv_field {
+	display: inline-block;
+	border-radius: 4px;
+	padding: 4px;
+	margin-right: 4px;
+	cursor: pointer;
+	white-space: nowrap;
+	border: 1px solid #c7c7c7;
+	border-radius: 4px;
+	background-color: #FFF;
+}
+
+.wcdv_group_control ul li.ui-sortable-helper .wcdv_field button,
+.wcdv_pivot_control ul li.ui-sortable-helper .wcdv_field button{
+	display: none;
+}
+
+/* VERTICAL CONTROLS */
+
+.wcdv_filter_control ul li:first-child .wcdv_field,
+.wcdv_aggregate_control ul li:first-child .wcdv_field {
+	border-top: none;
+}
+
+.wcdv_filter_control ul li .wcdv_field,
+.wcdv_aggregate_control ul li .wcdv_field {
+	border-top: solid 1px #444;
+	padding: 4px;
+}
+
+.wcdv_field button + span, .ui-sortable li span.fa{
+	vertical-align: middle;
+}
+
+/* AGGREGATE CONTROL */
+
+.wcdv_aggregate_control_error {
+	margin-left: 4px;
+	color: #FF9800;
+	cursor: help;
+}
+
+.ui-widget.ui-widget-content.wcdv_aggregate_control_error_tooltip {
+	border: solid 2px #FF9800;
+	border-top-width: 10px;
+	font-size: 0.85em;
+	padding: 4px 6px 4px 6px;
+}
+
+.ui-widget.ui-widget-content.wcdv_info_tooltip {
+	border: solid 2px #737373;
+	border-top-width: 10px;
+	font-size: 0.85em;
+	padding: 4px 6px 4px 6px;
+}
+
+/* FILTER CONTROL */
+
+.wcdv_filter_control ul li .wcdv_field {
+	display: flex;
+	align-items: center;
+}
+
+.wcdv_filter_control ul li .wcdv_field > * {
+	flex: none;
+}
+
+.wcdv_filter_control ul li .wcdv_field > .wcdv_filter_control_filter_container {
+	margin-left: 1ex;
+	flex: 1 1 auto;
+}
+
+.wcdv_filter_control ul li .wcdv_field > .wcdv_filter_control_filter_container > div {
+	align-items: center;
+	display: flex;
+	white-space: nowrap;
+	padding-top: 2px;
+	padding-bottom: 2px;
+}
+
+/* WARNING - MAY NEED TUNED IN THE FUTURE */
+
+.wcdv_filter_control ul li .wcdv_field > .wcdv_filter_control_filter_container > div > input,
+.wcdv_filter_control ul li .wcdv_field > .wcdv_filter_control_filter_container > div > div.SumoSelect {
+	flex: 1 1 auto;
+}
+
+/*
+ * If we don't set this here, then floatThead will cover up the Sumo Select dropdown.  The
+ * floatThead z-index is 1001.
+ */
+
+div.SumoSelect > div.optWrapper {
+	z-index: 1002;
+}
+
+.wcdv_filter_control_filter_container {
+	display: inline-block;
+}
+
+/******************************************************************************/
+
+.wcdv_grid_table,
+.wcdv_graph_render {
+	flex: 1 1 auto;
+}
+
+.wcdv_grid_table th {
+	white-space: nowrap;
+}
+
+.wcdv_grid_table .wcdv_group_col_spacer {
+	width: 18px;
+	min-width: 18px;
+	padding-right: 0px;
+}
+
+.wcdv_filter_icon {
+	cursor: pointer;
+    width: 1.5em;
+    padding: 0;
+    text-align: center;
+    margin: -.333em -0.26667em -.333em 0;
+    height: 1.86667em;
+    line-height: 1.86667em;
+}
+
+.wcdv_sort_icon {
+	cursor: pointer;
+    margin: -0.3333em 0 -0.3333em 0;
+}
+
+.wcdv_sort_arrow_active {
+	color: #FFF;
+}
+.wcdv_sort_arrow_inactive {
+	display: none;
+}
+
+/*
+td.wcdv_group_col_spacer,
+td.wcdv_group_value {
+	background-color: #EEE;
+}
+*/
+
+/*
+td.wcdv_group_value > span.wcdv_group_value {
+	font-weight: bold;
+}
+*/
+
+tr.wcdv_grid_filterrow th.wcdv_grid_filtercol {
+	text-transform: none;
+}
+
+/******************************************************************************/
+
+.wcdv_drop_target_hover {
+	background-color: rgba(0, 149, 214, 0.11) !important;
+}
+
+.wcdv_drag_handle.ui-draggable {
+	cursor: pointer;
+}
+
+.wcdv_drag_handle.ui-draggable-dragging {
+	visibility: visible;
+	border: solid 1px #888;
+	background-color: #EEE;
+	padding: 4px;
+	border-radius: 4px;
+	z-index: 1;
+
+	/*
+	 * Without negative margin, the extra space in the span causes the table column sizes to be
+	 * recalculated, making everything shift around when you start dragging.  Feels like a hack.
+	 * The exact number was determined by just playing around to find what works.
+	 */
+
+	margin: -10px;
+}
+
+/******************************************************************************/
+
+.wcdvgrid_textLeft {
+    text-align: left;
+}
+
+.wcdvgrid_textRight {
+    text-align: right;
+}
+
+.wcdvgrid_textCenter {
+    text-align: center;
+}
+
+.wcdvgrid_textJustify {
+    text-align: justify;
+}
+
+.wcdv_centered {
+	margin-left: auto;
+	margin-right: auto;
+}
+
+/*
+ * The "show more rows" button, shown when using the "more" limit method.
+ */
+
+tr.wcdvgrid_more td {
+	background-color: #F6F6F9;
+	border-top: 3px double #808080;
+	font-weight: normal;
+	color: #646464;
+	font-size: .85em;
+	font-weight: normal;
+	padding-bottom: 3px;
+	padding-top: 3px;
+	text-transform: uppercase;
+	cursor: pointer;
+}
+
+/*
+.wcdv_grid .tabletool .thead {
+	overflow: initial;
+}
+
+.wcdv_grid .tabletool .outer.thead {
+	overflow: initial;
+}
+
+.wcdv_grid .tabletool.ttsticky .outer.thead .inner {
+	overflow: initial;
+}
+*/
+
+.ui-progressbar.wcdvgrid_progressbar {
+	height: 32px;
+	padding: 8px;
+}
+
+.ui-progressbar .ui-progressbar-value.wcdvgrid_progressbar {
+	background: #80A0C0;
+}
+
+.ui-resizable-helper {
+	border: solid 2px dotted;
+}
+
+/*
+ * =============================================================================
+ *  BASIC TABLE STYLES
+ * =============================================================================
+ */
+
+.wcdv_grid_table table {
+	border-collapse: collapse;
+	background-color: #FFFFFF;
+	font-size: .75em;
+	width: 100%;
+}
+
+.wcdv_grid_table table th {
+	background-color: #FFF;
+    color: #737373;
+	font-weight: normal;
+	text-align: left;
+}
+
+.wcdv_grid_table table thead th {
+	background-color: #737373;
+	color: #FFF;
+}
+
+.wcdv_sort_column_active.wcdv_bg-primary{
+	color: #FFF;
+}
+
+/*
+.wcdv_grid_table table th.wcdv_sort_column_active {
+	background-color: rgba(255, 152, 0, 0.2);
+}
+*/
+
+.wcdv_grid_table table > thead > tr:first-child > th:first-child {
+	border-bottom: none;
+}
+
+.wcdv_grid_table table > thead > tr > th {
+	padding: 5px 4px;
+}
+
+.wcdv_grid_table table > thead > tr + tr > th{
+	background-color: #f0f0f5;
+    color: #000;
+    border-bottom: 1px solid #000;
+}
+
+/*
+.wcdv_grid_table table > thead > tr:last-child > th {
+	border-bottom: none !important;
+}
+*/
+
+.wcdv_grid_table table > tfoot {
+	background-color: #F6F6F9;
+	border-top: 3px double #808080;
+}
+
+.wcdv_grid_table table.zebra > tbody > tr:nth-child(even), .wcdv_grid_table table > tbody > tr.even {
+	/* blue: background-color: #e3f2fd; */
+	background-color: #e8f5e9;
+}
+
+.wcdv_grid_table table.zebra > tbody > tr.odd {
+	background-color: white;
+}
+
+.wcdv_grid_table table td.wcdv_selected_row {
+	background-color: rgba(255, 235, 59, .4);
+}
+
+/*
+.wcdv_grid_table table > tbody > tr:first-child > td,
+.wcdv_grid_table table > tbody > tr:first-child > th {
+	padding-top: 4px;
+}
+*/
+
+.wcdv_grid_table table td,
+.wcdv_grid_table table th {
+	padding: 4px;
+}
+
+.wcdv_grid_table table .wcdv_divider {
+	border-left: solid 1px #c7c7c7;
+	padding-left: 4px !important;
+}
+
+.wcdv_grid_table table .wcdv_pivot_colval_boundary {
+	border-left: solid 1px #c7c7c7;
+	padding-left: 4px !important;
+}
+
+.wcdv_grid_table table .wcdv_pivot_colval_boundary:first-child{
+	border-left: none;
+}
+
+.wcdv_grid_table table .wcdv_pivot_colval_boundary ~ td {
+	padding-left: 16px;
+}
+
+.wcdv_grid_table table .wcdv_pivot_aggregate_boundary {
+	border-left: double #c7c7c7;
+	padding-left: 4px !important;
+}
+
+.wcdv_grid_table table .wcdv_gridtable_agg_pivot td,
+.wcdv_grid_table table .wcdv_gridtable_agg_pivot th {
+	border-top: double #c7c7c7;
+	padding-top: 4px;
+}
+
+.wcdv_heading_container{
+	display: flex;
+}
+
+.wcdv_heading_container .wcdv_heading_title{
+	flex-grow: 1;
+	margin-right: 25px;
+	line-height: 20px;
+}
+
+.wcdv_heading_container div{
+	display: inline-block;
+}
+
+.wcdv_grid_table table .wcdv_bld {
+	border-left: double #c7c7c7;
+}
+
+.wcdv_grid_table table .wcdv_brd {
+	border-right: double #c7c7c7;
+}
+
+.wcdv_grid_table table .wcdv_btd {
+	border-top: double #c7c7c7;
+}
+
+.wcdv_graph_message {
+    font-size: 30px;
+    font-weight: bold;
+    color: #C0C0C0;
+    text-align: center;
+    position: relative;
+	padding: 10px 0;
+}
+
+/*
+ * ROW SELECTION CELLS
+ */
+
+.wcdv-row-select-col {
+    width: 1em;
+}
+
+/*
+ * CELLS YOU CAN "DRILL DOWN" INTO
+ */
+
+.wcdv_grid_table table td.wcdv_drill_down {
+	cursor: zoom-in;
+}
+.wcdv_grid_table table td.wcdv_drill_down:active {
+	background-color: #fff9c4;
+}
+
+/*
+ * EMPTY CELL
+ */
+
+.wcdv_grid_table table td.wcdv_cell_empty div {
+	background: repeating-linear-gradient(-45deg, rgba(127, 127, 127, 0.5), rgba(127, 127, 127, 0.5) 8px, rgba(0, 0, 0, 0) 8px, rgba(0, 0, 0, 0) 16px);
+}
+
+/*
+* Context Menu Styles
+*/
+
+.context-menu-item.context-menu-hover, .context-menu-hover.context-menu-icon.context-menu-icon--fa::before{
+	background-color: #f0f0f5;
+	color: #000;
+}
+
+/*
+* Font Awesome Tweaks
+*/
+
+.wcdv_grid .fa, .wcdv_graph .fa{
+	font-size: 18px;
+}
+
+.wcdv_grid th .fa{
+	font-size: 15px;
+	opacity: 0.8;
+}
+
+.wcdv_grid th .fa:hover, .wcdv_grid th .fa .fa{
+	opacity: 1;
+}
+
+/*
+ * FONT AWESOME STACK TWEAKS
+ */
+
+.wcdv_grid_table table .fa-stack {
+    width: 1.5em;
+    line-height: 1.86667em;
+    height: 1.86667em;
+	top: -1px;
+}
+
+/*
+* Various Overrides
+*/
+
+.wcdv_grid select{
+	padding: 2px;
+	border-color: #c7c7c7;
+}
+
+.wcdv_grid select + .fa{
+	vertical-align: middle;
+}
+
+/*
+* Main Theme Colors
+*/
+
+.wcdv_bg-primary{
+	background-color: #0095D6 !important;
+}
+
+.wcdv_text-primary{
+	color: #0095D6;
+}
+
+.wcdv_border-primary{
+	border-color: #0095D6 !important;
+}
+
+.wcdv_grid_table table.zebra > tbody > tr:nth-child(even), .wcdv_grid_table table > tbody > tr.even{
+	background-color: #f0f0f5;
+}
+
+.wcdv_grid_table table td.wcdv_selected_row{
+	background-color: #0095d642;
+}
+
+.context-menu-icon.context-menu-icon--fa::before{
+	color: #0095D6;
+}
+
+.SumoSelect .select-all.selected>span i, .SumoSelect>.optWrapper.multiple>.options li.opt.selected span i{
+	background-color: #0095D6;
+}
+
+.SumoSelect .select-all.partial>span i{
+	background-color: #c7c7c77a;
+}
+
+/*
+ * GRID COLUMN CONFIGURATION WINDOW
+ */
+
+.wcdv_colconfigwin_table {
+	width: 100%;
+}
+
+.wcdv_colconfigwin_table th {
+	text-align: left;
+	color: #808080;
+}
+
+.wcdv_colconfigwin_table tr {
+	background-color: white;
+}
+
+.wcdv_minimal_width {
+	width: 1px;
+}
+
+/******************************************************************************/
+
+.wcdv_group_value > .spinner,
+.wcdvgrid_more .spinner {
+  display: inline-block;
+  margin: auto 0.5em;
+}
+
+.wcdv_group_value > .spinner > div,
+.wcdvgrid_more .spinner > div {
+  width: 10px;
+  height: 10px;
+  background-color: #737373;
+  margin: auto 0.1em;
+
+  border-radius: 100%;
+  display: inline-block;
+  -webkit-animation: sk-bouncedelay 1.4s infinite ease-in-out both;
+  animation: sk-bouncedelay 1.4s infinite ease-in-out both;
+}
+
+.wcdv_group_value > .spinner .bounce1,
+.wcdvgrid_more .spinner .bounce1 {
+  -webkit-animation-delay: -0.32s;
+  animation-delay: -0.32s;
+}
+
+.wcdv_group_value > .spinner .bounce2,
+.wcdvgrid_more .spinner .bounce2 {
+  -webkit-animation-delay: -0.16s;
+  animation-delay: -0.16s;
+}
+
+@-webkit-keyframes sk-bouncedelay {
+  0%, 80%, 100% { -webkit-transform: scale(0) }
+  40% { -webkit-transform: scale(1.0) }
+}
+
+@keyframes sk-bouncedelay {
+  0%, 80%, 100% { 
+    -webkit-transform: scale(0);
+    transform: scale(0);
+  } 40% { 
+    -webkit-transform: scale(1.0);
+    transform: scale(1.0);
+  }
+}
+
+/* vim:set noet sw=4 ts=4: */

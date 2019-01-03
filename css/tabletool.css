@@ -1,0 +1,203 @@
+/* 
+EDIT BELOW THIS POINT AT YOUR OWN RISK
+YOUR ORIGINAL, UNWRAPPED TABLE MARGIN MUST BE SET TO 0. YOU MAY SET A MARGIN ON YOUR WRAPPED TABLE (THE .TABLETOOL ELEMENT)
+POSITION: FIXED IS UNSUPPORTED IN WINDOWS PHONE 7. STICKY TABLE HEADERS AND FOOTERS WILL NOT "STICK" TO TOP OR BOTTOM OF SCREEN. CONSIDER USING data-ttType="fixed" OR NOT SPECIFYING A DATA- VALUE.
+STICKY TABLES IN IE7 MUST BE CENTERED IN THE PAGE FOR HEADER/FOOTER ALIGNMENT TO WORK
+ISSUE IN IE7 WITH RENDERING TABLE-LAYOUT: AUTO. NO MIN WIDTH THRESHOLD
+IF USING INLINE-BLOCK PARENTS, SET WIDTH TO 100% FOR BEST RESULTS
+INLINE STYLING WILL OVERRIDE TABLETOOL.CSS UNLESS AN !IMPORTANT FLAG IS PRESENT IN THE VALUE STATEMENT
+FOR DESIRED RESULTS, AVOID STYLING YOUR TABLES USING ID'S
+YOUR TABLE MUST MEET W3 TABLE STANDARDS: http://www.w3.org/TR/html-markup/table.html#table
+TARGET YOUR STICKY HEADERS/FOOTERS WHILE FIXED TO THE WINDOW USING THE CSS ".isStuck" CLASS. EXAMPLE: .tabletool .thead.isStuck {COLOR: GREEN;}
+TARGET YOUR FIXED HEADERS/FOOTERS WHILE THE SCROLLBAR IS POSITIONED AT THE TOP OR BOTTOM OF THE TABLE USING THE CSS CLASSES ".atTop" or ".atBottom" APPENDED TO THE .THEAD OR .TFOOT ELEMENTS. EXAMPLE: .tabletool .thead.atTop {background-color: white;}
+ID ATTRIBUTES ON ELEMENTS INSIDE OF CLONED HEADERS/FOOTERS WILL GET THE STRING "-tt" APPENDED TO THE EXISTING ID VALUE. BEFORE: id="cell-wrap" AFTER: id="cell-wrap-tt"
+THIS ID CONVERSION IS PERFORMED TO COMPLY WITH VALIDATION STANDARDS AND SUPPORT JAVASCRIPT APPLIED TO CLONED ELEMENTS WITH ID ATTRIBUTES
+*/
+.tabletool {
+	position: relative;
+}
+
+.tabletool table {
+	width: 100%;
+}
+
+.tabletool .outer {
+	overflow-y: auto;
+	overflow-x: hidden;
+}
+
+.tabletool .thead {
+	top: 0;
+	position: absolute;
+	overflow: hidden;
+}
+
+.tabletool .tbody {
+	-webkit-overflow-scrolling: touch;
+}
+
+.tabletool .tfoot {
+	top: auto;
+	bottom: 0;
+}
+
+.tabletool .thead table, .tabletool .tfoot table {
+	table-layout: fixed;
+}
+
+.tabletool .thead  tfoot, .tabletool .thead  tbody {
+	visibility: hidden;
+}
+
+/*ttfixed specific*/
+.tabletool.ttfixed .tbody.outer .inner table {
+	border: none;
+	min-width: 100%;
+	width: auto;
+	overflow: hidden;
+}
+
+.tabletool.ttfixed .tbody.outer .inner table > caption, .tabletool.ttfixed .tbody.outer .inner table > thead {
+	visibility: hidden;
+}
+
+.tabletool.ttfixed .tfoot.outer {
+	position: absolute;
+	top: auto;
+	bottom: 0;
+	overflow: hidden;
+}
+
+.tabletool.ttfixed .thead.outer {
+	position: absolute;
+	top: 0;
+	bottom: auto;
+}
+
+.tabletool.ttfixed .tbody.outer {
+	overflow-y: auto;
+	overflow-x: hidden;
+}
+
+/*ttsticky specific*/
+
+.tabletool.ttsticky .thead.outer {
+	background-color: transparent !important;
+	top: 0;
+	bottom: auto;
+}
+
+.tabletool.ttsticky .thead.outer .inner {
+	overflow: hidden;
+}
+
+.tabletool.ttsticky .tfoot.outer {
+	overflow: hidden;
+	background-color: transparent !important;
+	top: auto;
+	bottom: 0;
+}
+
+.tabletool.ttsticky .tbody.outer {
+	margin-top: 0;
+}
+
+.tabletool.ttsticky .tbody.outer .inner table {
+	border: none;
+	min-width: 100%;
+	width: auto;
+	overflow: hidden;
+}
+
+.tabletool.ttsticky .tbody.outer .inner table > tfoot{
+	overflow: hidden;
+}
+
+.tabletool.ttsticky .tbody.outer .inner table > thead{
+	overflow: hidden;
+	visibility: hidden;
+}
+
+.tabletool.ttsticky .tbody.outer .inner table > caption {
+	visibility: hidden;
+}
+
+/* Sidescroll Tables */
+.tabletool.ttsidescroll .scrollheadwrap {
+	float: left;
+	overflow: hidden;
+}
+
+.tabletool.ttsidescroll .scrollbodywrap {
+	overflow: auto;
+}
+
+/*Target Box-Sizing IE7*/
+.ttsticky.stickyFeatureTarget .tfoot.outer {
+	left: 0;
+	right: 0;
+}
+
+.ttsticky.stickyFeatureTarget .tfoot.outer .inner {
+	margin: 0px auto;
+}
+
+.ttsticky.stickyFeatureTarget .thead.outer {
+	left: 0;
+	right: 0;
+}
+
+.ttsticky.stickyFeatureTarget .thead.outer .inner {
+	margin: 0px auto;
+}
+
+/*Unsupported*/
+.ttsticky.unsupported .thead {
+	position: absolute !important;
+	top: 0 !important;
+	bottom: auto !important;
+}
+
+.ttsticky.unsupported .tfoot {
+	position: absolute !important;
+	bottom: 0 !important;
+	top: auto !important;
+}
+
+.ttfixed.unsupported .tbody.outer .inner table{
+	width: 100% !important;
+}
+
+.ttfixed.unsupported .tbody.outer {
+	max-height: none !important;
+}
+
+/*Fieldset Fix*/
+
+.ttFieldsetFix {
+	margin: 0;
+	padding: 0;
+	min-width: 0;
+}
+
+@-moz-document url-prefix() {
+    .ttFieldsetFix{
+        display: table-cell;
+    }
+}
+
+@media print {
+	/* All your print styles go here */
+	.tabletool .thead.outer,
+	.tabletool .tfoot.outer {
+		display:none;
+	}
+
+	.tabletool .tbody thead {
+		visibility: visible !important;
+	}
+
+	.tabletool table {
+		width: 100% !important;
+	}
+}
