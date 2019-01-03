@@ -1,4 +1,5 @@
 #!/usr/bin/python2.7
+
 import MySQLdb
 import config
 import argparse
@@ -26,6 +27,16 @@ class ThatsVeryNAS:
             return True
         else:
             return False
+
+    def GetFiles(self, options):
+        self.dbc.execute('''SELECT p.path,f.filename,f.modified_dt,f.status 
+        FROM files f LEFT JOIN paths p ON p.path_id=f.path_id WHERE MATCH (filename) AGAINST ('%s' IN NATURAL LANGUAGE MODE) 
+        OR MATCH (p.path) AGAINST ('%s' IN NATURAL LANGUAGE MODE)''' %(options["mainsearch"],options["mainsearch"]))
+        result={
+            "columns": [x[0] for x in self.dbc.description], #this will extract row headers
+            "rows": self.dbc.fetchall()
+        }
+        return result
 
     def PathExists(self,path):
         self.dbc.execute(self.getpath_stored, {path})
