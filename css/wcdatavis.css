@@ -12,7 +12,7 @@ button.wcdv_icon_button {
 button.wcdv_icon_button,
 .wcdv_spinner {
 	border: none;
-	background-color: inherit;
+	background-color: transparent;
 	padding: 0;
 	vertical-align: middle;
 }
@@ -21,10 +21,70 @@ button.wcdv_button_left {
 	margin-left: 0.5em;
 }
 
+/*
+ * In-cell buttons like the one used to show the full value of a cell when the maxHeight is set in
+ * column config.
+ */
+
+td button.wcdv_icon_button_incell {
+	/*
+	position: absolute;
+	top: 0px;
+	right: 0px;
+	*/
+	float: right;
+	border: none;
+	margin-left: 4px; /* to keep left-aligned data (like numbers) from running into it */
+	padding: 2px;
+	border-radius: 2px;
+	background-color: #E0E0E080;
+	color: #80808080;
+}
+
+td:hover button.wcdv_icon_button_incell {
+	background-color: #C0C0C080;
+}
+
+td button.wcdv_icon_button_incell:hover {
+	color: #404040;
+}
+
+td button.wcdv_icon_button_incell span.fa {
+	font-size: 12px;
+}
+
 button.wcdv_icon_button span.fa {
 	cursor: pointer;
 	/*font-size: 120%;*/
-	font-size: 16px;
+	font-size: 18px;
+}
+
+button.wcdv_icon_button_nolabel span.fa {
+	margin-right: 0px !important;
+}
+
+/*
+ * Styles for checkboxes which are displayed using FontAwesome icons.
+ */
+
+button.wcdv_icon_button > span.fa.wcdv_icon_checkbox_off {
+	color: #000;
+	padding: 0.2em;
+	border-radius: 0.2em;
+}
+button.wcdv_icon_button > span.fa.wcdv_icon_checkbox_on {
+	background-color: #0095D6;
+	color: #FFF;
+	padding: 0.2em;
+	border-radius: 0.2em;
+}
+
+button.wcdv_option {
+	width: 100%;
+	padding-top: 1ex;
+	padding-bottom: 1ex;
+	margin-top: 0.5ex;
+	margin-bottom: 0.5ex;
 }
 
 .wcdv_grid button > span.fa,
@@ -50,7 +110,7 @@ button.wcdv_expand_button {
 button.wcdv_expand_button > span.fa {
 	cursor: pointer;
 	margin-right: inherit;
-	font-size: 13px;
+	font-size: 15px;
 	color: #737373;
 }
 
@@ -70,6 +130,24 @@ button.wcdv_expand_button > span.fa {
     padding: 4px;
     margin-bottom: 4px;
     background-color: #fadfdb;
+}
+
+.wcdv_info_banner {
+	border: solid 2px #2196F3;
+	background-color: #E3F2FD;
+	color: #0D47A1;
+    padding: 1ex;
+	margin-top: 1ex;
+}
+
+.wcdv_bottom_border_teal {
+	border-bottom: solid 2px #009688;
+}
+
+hr.wcdv_hr_gradient {
+	border: 0;
+	height: 2px;
+	background-image: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0));
 }
 
 /******************************************************************************/
@@ -148,7 +226,7 @@ button.wcdv_expand_button > span.fa {
 	border-bottom: 1px solid #c7c7c7;
 	padding: 0 4px;
 	flex: 0 0 auto;
-	font-size: 0.70em;
+	font-size: 0.85em;
 	padding: 0 8px;
 }
 
@@ -168,7 +246,7 @@ button.wcdv_expand_button > span.fa {
 
 .wcdv_grid_toolbar > span.fa {
 	color: #888;
-	font-size: 14px;
+	font-size: 18px;
 }
 .wcdv_grid_toolbar > span.fa:hover {
 	color: #444;
@@ -227,31 +305,22 @@ button.wcdv_expand_button > span.fa {
 .wcdv_grid_control {
 	background-color: #FFF;
 	border-bottom: 1px solid #c7c7c7;
-	font-size: 0.70em;
-	padding: 0 8px;
-	display: flex;
-    flex-shrink: 0;
+	font-size: 0.85em;
 
 	/*
 	 * Flexible display of group/filter/pivot controls.
 	 */
-	/*
-	display: flex;
-	justify-content: space-between;
-	align-items: flex-start;
-	*/
-}
 
-/*
-.wcdv_group_control,
-.wcdv_pivot_control {
-	font-size: 0.85em;
+	display: flex;
+    flex-shrink: 0;
+	flex-wrap: wrap;
+	justify-content: space-between;
 }
-*/
 
 .wcdv_control_title_bar {
 	display: flex;
 	border-bottom: 1px solid #737373;
+	align-items: baseline;
 }
 
 .wcdv_control_title {
@@ -269,10 +338,28 @@ button.wcdv_expand_button > span.fa {
     font-size: 16px !important;
 }
 
-.wcdv_group_control > div > ul,
-.wcdv_filter_control > div > ul,
-.wcdv_pivot_control > div > ul,
-.wcdv_aggregate_control > div > ul {
+.wcdv_control_pane {
+	flex-grow: 1;
+	background-color: #FFF;
+	padding: 8px;
+	display: inline-block;
+	vertical-align: top;
+	border: solid 1px #c7c7c7;
+	border-radius: 8px;
+	margin: 8px;
+}
+
+/*
+.wcdv_control_pane {
+	border-left: 1px solid #c7c7c7;
+}
+
+.wcdv_control_pane:first-child {
+	border-left: none;
+}
+*/
+
+.wcdv_control_pane > div > ul {
 	list-style-type: none;
 	padding: 0px;
 	margin-top: 1ex;
@@ -280,26 +367,9 @@ button.wcdv_expand_button > span.fa {
 	width: 100%;
 }
 
-.wcdv_group_control,
-.wcdv_filter_control,
-.wcdv_pivot_control,
-.wcdv_aggregate_control {
-	border-right: 1px solid #c7c7c7;
-	background-color: #FFF;
-	padding: 10px 8px;
-	display: inline-block;
-	vertical-align: top;
-	min-width: 122px;
-}
-
-.wcdv_filter_control{
-	padding-left: 0;
-}
-
 /* HORIZONTAL CONTROLS */
 
-.wcdv_group_control ul li,
-.wcdv_pivot_control ul li {
+.wcdv_control_pane ul.wcdv_control_horizontal li {
 	display: inline-block;
 }
 
@@ -310,13 +380,11 @@ button.wcdv_expand_button > span.fa {
  * field elements.
  */
 
-.wcdv_group_control ul > li:first-child > span.fa,
-.wcdv_pivot_control ul > li:first-child > span.fa {
+.wcdv_control_pane ul.wcdv_control_horizontal > li:first-child > span.fa {
 	display: none;
 }
 
-.wcdv_group_control ul li > span.fa,
-.wcdv_pivot_control ul li > span.fa {
+.wcdv_control_pane ul.wcdv_control_horizontal li > span.fa {
 	margin-right: 4px;
 }
 
@@ -324,8 +392,7 @@ button.wcdv_expand_button > span.fa {
  * These are the fields themselves.
  */
 
-.wcdv_group_control ul li .wcdv_field,
-.wcdv_pivot_control ul li .wcdv_field {
+.wcdv_control_pane ul.wcdv_control_horizontal li .wcdv_field {
 	display: inline-block;
 	border-radius: 4px;
 	padding: 4px;
@@ -337,25 +404,39 @@ button.wcdv_expand_button > span.fa {
 	background-color: #FFF;
 }
 
-.wcdv_group_control ul li.ui-sortable-helper .wcdv_field button,
-.wcdv_pivot_control ul li.ui-sortable-helper .wcdv_field button{
+.wcdv_control_pane ul.wcdv_control_horizontal li.ui-sortable-helper .wcdv_field button {
 	display: none;
 }
 
 /* VERTICAL CONTROLS */
 
-.wcdv_filter_control ul li:first-child .wcdv_field,
-.wcdv_aggregate_control ul li:first-child .wcdv_field {
+.wcdv_control_pane .wcdv_control_vertical li:first-child .wcdv_field {
 	border-top: none;
 }
 
-.wcdv_filter_control ul li .wcdv_field,
-.wcdv_aggregate_control ul li .wcdv_field {
-	border-top: solid 1px #444;
+.wcdv_control_pane .wcdv_control_vertical li .wcdv_field {
+	display: flex;
+	align-items: center;
+	border-top: dashed 1px #c7c7c7;
 	padding: 4px;
 }
 
-.wcdv_field button + span, .ui-sortable li span.fa{
+/*
+ * These are the fields themselves.
+ */
+
+.wcdv_control_pane .wcdv_control_vertical .wcdv_field .wcdv_field_name {
+	flex-grow: 1;
+	flex-shrink: 0;
+	/*
+	max-width: 10em;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	*/
+}
+
+.wcdv_field button + span, .ui-sortable li span.fa {
 	vertical-align: middle;
 }
 
@@ -392,6 +473,10 @@ button.wcdv_expand_button > span.fa {
 	flex: none;
 }
 
+.wcdv_filter_control ul li .wcdv_field .wcdv_field_name {
+	flex-grow: 0 !important;
+}
+
 .wcdv_filter_control ul li .wcdv_field > .wcdv_filter_control_filter_container {
 	margin-left: 1ex;
 	flex: 1 1 auto;
@@ -425,6 +510,22 @@ div.SumoSelect > div.optWrapper {
 	display: inline-block;
 }
 
+/* AGGREGATE CONTROL */
+
+.wcdv_aggregate_control .wcdv_field {
+	align-items: baseline !important;
+}
+
+ul.wcdv_aggregate_control_fieldlist {
+	padding-left: 0.5em;
+	list-style-type: none;
+	text-align: right;
+}
+
+ul.wcdv_aggregate_control_fieldlist > li > label {
+	padding-right: 0.5em;
+}
+
 /******************************************************************************/
 
 .wcdv_grid_table,
@@ -439,7 +540,8 @@ div.SumoSelect > div.optWrapper {
 .wcdv_grid_table .wcdv_group_col_spacer {
 	width: 18px;
 	min-width: 18px;
-	padding-right: 0px;
+	text-align: center;
+	/*padding-right: 0px;*/
 }
 
 .wcdv_filter_icon {
@@ -584,7 +686,7 @@ tr.wcdvgrid_more td {
 .wcdv_grid_table table {
 	border-collapse: collapse;
 	background-color: #FFFFFF;
-	font-size: .75em;
+	font-size: 1em;
 	width: 100%;
 }
 
@@ -635,6 +737,14 @@ tr.wcdvgrid_more td {
 	border-top: 3px double #808080;
 }
 
+.wcdv_grid_table table > tfoot > tr {
+	border-bottom: solid 1px #c7c7c7;
+}
+
+.wcdv_grid_table table > tfoot > tr:last-child {
+	border-bottom: none;
+}
+
 .wcdv_grid_table table.zebra > tbody > tr:nth-child(even), .wcdv_grid_table table > tbody > tr.even {
 	/* blue: background-color: #e3f2fd; */
 	background-color: #e8f5e9;
@@ -658,6 +768,7 @@ tr.wcdvgrid_more td {
 .wcdv_grid_table table td,
 .wcdv_grid_table table th {
 	padding: 4px;
+	vertical-align: top;
 }
 
 .wcdv_grid_table table .wcdv_divider {
@@ -743,11 +854,36 @@ tr.wcdvgrid_more td {
 	background-color: #fff9c4;
 }
 
+.wcdv_maxheight_wrapper {
+	position: relative;
+	overflow: hidden;
+}
+
+.wcdv_maxheight_wrapper_withwidth {
+	text-overflow: ellipsis;
+}
+
 /*
  * EMPTY CELL
  */
 
-.wcdv_grid_table table td.wcdv_cell_empty div {
+html:not(.ie11) .wcdv_grid_table table td.wcdv_cell_empty,
+html:not(.ie11) .wcdv_grid_table table th.wcdv_cell_empty {
+	position: relative;
+}
+
+html:not(.ie11) .wcdv_grid_table table td.wcdv_cell_empty div,
+html:not(.ie11) .wcdv_grid_table table th.wcdv_cell_empty div {
+	position: absolute;
+	top: 0px;
+	left: 0px;
+	right: 0px;
+	bottom: 0px;
+	margin: 4px;
+}
+
+.wcdv_grid_table table td.wcdv_cell_empty div,
+.wcdv_grid_table table th.wcdv_cell_empty div {
 	background: repeating-linear-gradient(-45deg, rgba(127, 127, 127, 0.5), rgba(127, 127, 127, 0.5) 8px, rgba(0, 0, 0, 0) 8px, rgba(0, 0, 0, 0) 16px);
 }
 
@@ -841,21 +977,51 @@ tr.wcdvgrid_more td {
  * GRID COLUMN CONFIGURATION WINDOW
  */
 
-.wcdv_colconfigwin_table {
-	width: 100%;
+.wcdv_dialog {
+	z-index: 1100; !important
 }
 
-.wcdv_colconfigwin_table th {
-	text-align: left;
-	color: #808080;
+.wcdv_colconfigwin_table {
+	width: 100%;
+	border-collapse: collapse;
 }
 
 .wcdv_colconfigwin_table tr {
 	background-color: white;
 }
 
+.wcdv_colconfigwin_table thead tr th {
+	text-align: left;
+	color: #808080;
+}
+
+.wcdv_colconfigwin_table tbody tr td:first-child,
+.wcdv_colconfigwin_table thead tr th:first-child {
+    padding-left: 0.5em;
+}
+
+.wcdv_colconfigwin_table tbody tr td,
+.wcdv_colconfigwin_table thead tr th {
+    padding-top: 0.5ex;
+    padding-bottom: 0.5ex;
+}
+
+.wcdv_colconfigwin_table tbody tr td:last-child,
+.wcdv_colconfigwin_table thead tr th:last-child {
+    padding-right: 0.5em;
+}
+
+.wcdv_colconfigwin_table tbody tr:hover {
+    background-color: #E0F2F1;
+}
+
 .wcdv_minimal_width {
 	width: 1px;
+}
+
+.wcdv_width_1em {
+	text-align: center;
+	width: 1em;
 }
 
 /******************************************************************************/
@@ -897,10 +1063,10 @@ tr.wcdvgrid_more td {
 }
 
 @keyframes sk-bouncedelay {
-  0%, 80%, 100% { 
+  0%, 80%, 100% {
     -webkit-transform: scale(0);
     transform: scale(0);
-  } 40% { 
+  } 40% {
     -webkit-transform: scale(1.0);
     transform: scale(1.0);
   }

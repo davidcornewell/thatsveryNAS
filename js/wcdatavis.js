@@ -1,18 +1,18 @@
-(function (stream,fs,jQuery) {
+(function (jQuery, stream, fs) {
 	'use strict';
 
+	jQuery = jQuery && jQuery.hasOwnProperty('default') ? jQuery['default'] : jQuery;
 	stream = stream && stream.hasOwnProperty('default') ? stream['default'] : stream;
 	fs = fs && fs.hasOwnProperty('default') ? fs['default'] : fs;
-	jQuery = jQuery && jQuery.hasOwnProperty('default') ? jQuery['default'] : jQuery;
 
-	var commonjsGlobal = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
+	var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
 
 	function commonjsRequire () {
 		throw new Error('Dynamic requires are not currently supported by rollup-plugin-commonjs');
 	}
 
 	function unwrapExports (x) {
-		return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, 'default') ? x.default : x;
+		return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, 'default') ? x['default'] : x;
 	}
 
 	function createCommonjsModule(fn, module) {
@@ -23,10 +23,10 @@
 	(function (globalObject) {
 
 	/*
-	 *      bignumber.js v8.0.1
+	 *      bignumber.js v8.1.1
 	 *      A JavaScript library for arbitrary-precision arithmetic.
 	 *      https://github.com/MikeMcl/bignumber.js
-	 *      Copyright (c) 2018 Michael Mclaughlin <M8ch88l@gmail.com>
+	 *      Copyright (c) 2019 Michael Mclaughlin <M8ch88l@gmail.com>
 	 *      MIT Licensed.
 	 *
 	 *      BigNumber.prototype methods     |  BigNumber methods
@@ -72,6 +72,7 @@
 
 	  var BigNumber,
 	    isNumeric = /^-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i,
+	    hasSymbol = typeof Symbol == 'function' && typeof Symbol.iterator == 'symbol',
 
 	    mathceil = Math.ceil,
 	    mathfloor = Math.floor,
@@ -197,51 +198,57 @@
 	     * The BigNumber constructor and exported function.
 	     * Create and return a new instance of a BigNumber object.
 	     *
-	     * n {number|string|BigNumber} A numeric value.
-	     * [b] {number} The base of n. Integer, 2 to ALPHABET.length inclusive.
+	     * v {number|string|BigNumber} A numeric value.
+	     * [b] {number} The base of v. Integer, 2 to ALPHABET.length inclusive.
 	     */
-	    function BigNumber(n, b) {
+	    function BigNumber(v, b) {
 	      var alphabet, c, caseChanged, e, i, isNum, len, str,
 	        x = this;
 
-	      // Enable constructor usage without new.
-	      if (!(x instanceof BigNumber)) {
-
-	        // Don't throw on constructor call without new (#81).
-	        // '[BigNumber Error] Constructor call without new: {n}'
-	        //throw Error(bignumberError + ' Constructor call without new: ' + n);
-	        return new BigNumber(n, b);
-	      }
+	      // Enable constructor call without `new`.
+	      if (!(x instanceof BigNumber)) return new BigNumber(v, b);
 
 	      if (b == null) {
 
-	        // Duplicate.
-	        if (n instanceof BigNumber) {
-	          x.s = n.s;
-	          x.e = n.e;
-	          x.c = (n = n.c) ? n.slice() : n;
+	        if (v && v._isBigNumber === true) {
+	          x.s = v.s;
+
+	          if (!v.c || v.e > MAX_EXP) {
+	            x.c = x.e = null;
+	          } else if (v.e < MIN_EXP) {
+	            x.c = [x.e = 0];
+	          } else {
+	            x.e = v.e;
+	            x.c = v.c.slice();
+	          }
+
 	          return;
 	        }
 
-	        isNum = typeof n == 'number';
-
-	        if (isNum && n * 0 == 0) {
+	        if ((isNum = typeof v == 'number') && v * 0 == 0) {
 
 	          // Use `1 / n` to handle minus zero also.
-	          x.s = 1 / n < 0 ? (n = -n, -1) : 1;
+	          x.s = 1 / v < 0 ? (v = -v, -1) : 1;
 
-	          // Faster path for integers.
-	          if (n === ~~n) {
-	            for (e = 0, i = n; i >= 10; i /= 10, e++);
-	            x.e = e;
-	            x.c = [n];
+	          // Fast path for integers, where n < 2147483648 (2**31).
+	          if (v === ~~v) {
+	            for (e = 0, i = v; i >= 10; i /= 10, e++);
+
+	            if (e > MAX_EXP) {
+	              x.c = x.e = null;
+	            } else {
+	              x.e = e;
+	              x.c = [v];
+	            }
+
 	            return;
 	          }
 
-	          str = String(n);
+	          str = String(v);
 	        } else {
-	          str = String(n);
-	          if (!isNumeric.test(str)) return parseNumeric(x, str, isNum);
+
+	          if (!isNumeric.test(str = String(v))) return parseNumeric(x, str, isNum);
+
 	          x.s = str.charCodeAt(0) == 45 ? (str = str.slice(1), -1) : 1;
 	        }
 
@@ -265,32 +272,28 @@
 
 	        // '[BigNumber Error] Base {not a primitive number|not an integer|out of range}: {b}'
 	        intCheck(b, 2, ALPHABET.length, 'Base');
-	        str = String(n);
 
 	        // Allow exponential notation to be used with base 10 argument, while
 	        // also rounding to DECIMAL_PLACES as with other bases.
 	        if (b == 10) {
-	          x = new BigNumber(n instanceof BigNumber ? n : str);
+	          x = new BigNumber(v);
 	          return round(x, DECIMAL_PLACES + x.e + 1, ROUNDING_MODE);
 	        }
 
-	        isNum = typeof n == 'number';
+	        str = String(v);
 
-	        if (isNum) {
+	        if (isNum = typeof v == 'number') {
 
 	          // Avoid potential interpretation of Infinity and NaN as base 44+ values.
-	          if (n * 0 != 0) return parseNumeric(x, str, isNum, b);
+	          if (v * 0 != 0) return parseNumeric(x, str, isNum, b);
 
-	          x.s = 1 / n < 0 ? (str = str.slice(1), -1) : 1;
+	          x.s = 1 / v < 0 ? (str = str.slice(1), -1) : 1;
 
 	          // '[BigNumber Error] Number primitive has more than 15 significant digits: {n}'
 	          if (BigNumber.DEBUG && str.replace(/^0\.0*|\./, '').length > 15) {
 	            throw Error
-	             (tooManyDigits + n);
+	             (tooManyDigits + v);
 	          }
-
-	          // Prevent later check for length on converted number.
-	          isNum = false;
 	        } else {
 	          x.s = str.charCodeAt(0) === 45 ? (str = str.slice(1), -1) : 1;
 	        }
@@ -299,7 +302,7 @@
 	        e = i = 0;
 
 	        // Check that str is a valid base b number.
-	        // Don't use RegExp so alphabet can contain special characters.
+	        // Don't use RegExp, so alphabet can contain special characters.
 	        for (len = str.length; i < len; i++) {
 	          if (alphabet.indexOf(c = str.charAt(i)) < 0) {
 	            if (c == '.') {
@@ -321,10 +324,12 @@
 	              }
 	            }
 
-	            return parseNumeric(x, String(n), isNum, b);
+	            return parseNumeric(x, String(v), isNum, b);
 	          }
 	        }
 
+	        // Prevent later check for length on converted number.
+	        isNum = false;
 	        str = convertBase(str, b, 10, x.s);
 
 	        // Decimal point?
@@ -338,22 +343,18 @@
 	      // Determine trailing zeros.
 	      for (len = str.length; str.charCodeAt(--len) === 48;);
 
-	      str = str.slice(i, ++len);
-
-	      if (str) {
+	      if (str = str.slice(i, ++len)) {
 	        len -= i;
 
 	        // '[BigNumber Error] Number primitive has more than 15 significant digits: {n}'
 	        if (isNum && BigNumber.DEBUG &&
-	          len > 15 && (n > MAX_SAFE_INTEGER || n !== mathfloor(n))) {
+	          len > 15 && (v > MAX_SAFE_INTEGER || v !== mathfloor(v))) {
 	            throw Error
-	             (tooManyDigits + (x.s * n));
+	             (tooManyDigits + (x.s * v));
 	        }
 
-	        e = e - i - 1;
-
 	         // Overflow?
-	        if (e > MAX_EXP) {
+	        if ((e = e - i - 1) > MAX_EXP) {
 
 	          // Infinity.
 	          x.c = x.e = null;
@@ -372,7 +373,7 @@
 	          // e is the base 10 exponent.
 	          // i is where to slice str to get the first element of the coefficient array.
 	          i = (e + 1) % LOG_BASE;
-	          if (e < 0) i += LOG_BASE;
+	          if (e < 0) i += LOG_BASE;  // i < 1
 
 	          if (i < len) {
 	            if (i) x.c.push(+str.slice(0, i));
@@ -381,8 +382,7 @@
 	              x.c.push(+str.slice(i, i += LOG_BASE));
 	            }
 
-	            str = str.slice(i);
-	            i = LOG_BASE - str.length;
+	            i = LOG_BASE - (str = str.slice(i)).length;
 	          } else {
 	            i -= len;
 	          }
@@ -599,10 +599,56 @@
 	    /*
 	     * Return true if v is a BigNumber instance, otherwise return false.
 	     *
+	     * If BigNumber.DEBUG is true, throw if a BigNumber instance is not well-formed.
+	     *
 	     * v {any}
+	     *
+	     * '[BigNumber Error] Invalid BigNumber: {v}'
 	     */
 	    BigNumber.isBigNumber = function (v) {
-	      return v instanceof BigNumber || v && v._isBigNumber === true || false;
+	      if (!v || v._isBigNumber !== true) return false;
+	      if (!BigNumber.DEBUG) return true;
+
+	      var i, n,
+	        c = v.c,
+	        e = v.e,
+	        s = v.s;
+
+	      out: if ({}.toString.call(c) == '[object Array]') {
+
+	        if ((s === 1 || s === -1) && e >= -MAX && e <= MAX && e === mathfloor(e)) {
+
+	          // If the first element is zero, the BigNumber value must be zero.
+	          if (c[0] === 0) {
+	            if (e === 0 && c.length === 1) return true;
+	            break out;
+	          }
+
+	          // Calculate number of digits that c[0] should have, based on the exponent.
+	          i = (e + 1) % LOG_BASE;
+	          if (i < 1) i += LOG_BASE;
+
+	          // Calculate number of digits of c[0].
+	          //if (Math.ceil(Math.log(c[0] + 1) / Math.LN10) == i) {
+	          if (String(c[0]).length == i) {
+
+	            for (i = 0; i < c.length; i++) {
+	              n = c[i];
+	              if (n < 0 || n >= BASE || n !== mathfloor(n)) break out;
+	            }
+
+	            // Last element cannot be zero, unless it is the only element.
+	            if (n !== 0) return true;
+	          }
+	        }
+
+	      // Infinity/NaN
+	      } else if (c === null && e === null && (s === null || s === 1 || s === -1)) {
+	        return true;
+	      }
+
+	      throw Error
+	        (bignumberError + 'Invalid BigNumber: ' + v);
 	    };
 
 
@@ -1220,7 +1266,7 @@
 
 	      if (i == null) {
 	        str = coeffToString(n.c);
-	        str = id == 1 || id == 2 && ne <= TO_EXP_NEG
+	        str = id == 1 || id == 2 && (ne <= TO_EXP_NEG || ne >= TO_EXP_POS)
 	         ? toExponential(str, ne)
 	         : toFixedPoint(str, ne, '0');
 	      } else {
@@ -1336,7 +1382,6 @@
 	        // No exception on ±Infinity or NaN.
 	        if (isInfinityOrNaN.test(s)) {
 	          x.s = isNaN(s) ? null : s < 0 ? -1 : 1;
-	          x.c = x.e = null;
 	        } else {
 	          if (!isNum) {
 
@@ -1364,8 +1409,10 @@
 	          }
 
 	          // NaN
-	          x.c = x.e = x.s = null;
+	          x.s = null;
 	        }
+
+	        x.c = x.e = null;
 	      }
 	    })();
 
@@ -2690,15 +2737,16 @@
 	          str = 'NaN';
 	        }
 	      } else {
-	        str = coeffToString(n.c);
-
 	        if (b == null) {
 	          str = e <= TO_EXP_NEG || e >= TO_EXP_POS
-	           ? toExponential(str, e)
-	           : toFixedPoint(str, e, '0');
+	           ? toExponential(coeffToString(n.c), e)
+	           : toFixedPoint(coeffToString(n.c), e, '0');
+	        } else if (b === 10) {
+	          n = round(new BigNumber(n), DECIMAL_PLACES + e + 1, ROUNDING_MODE);
+	          str = toFixedPoint(coeffToString(n.c), n.e, '0');
 	        } else {
 	          intCheck(b, 2, ALPHABET.length, 'Base');
-	          str = convertBase(toFixedPoint(str, e, '0'), 10, b, s, true);
+	          str = convertBase(toFixedPoint(coeffToString(n.c), e, '0'), 10, b, s, true);
 	        }
 
 	        if (s < 0 && n.c[0]) str = '-' + str;
@@ -2719,8 +2767,9 @@
 
 	    P._isBigNumber = true;
 
-	    if (typeof Symbol == 'function' && typeof Symbol.iterator == 'symbol') {
+	    if (hasSymbol) {
 	      P[Symbol.toStringTag] = 'BigNumber';
+
 	      // Node.js v10.12.0+
 	      P[Symbol.for('nodejs.util.inspect.custom')] = P.valueOf;
 	    }
@@ -2732,6 +2781,9 @@
 
 
 	  // PRIVATE HELPER FUNCTIONS
+
+	  // These functions don't need access to variables,
+	  // e.g. DECIMAL_PLACES, in the scope of the `clone` function above.
 
 
 	  function bitFloor(n) {
@@ -2806,7 +2858,7 @@
 	   * Check that n is a primitive number, an integer, and in range, otherwise throw.
 	   */
 	  function intCheck(n, min, max, name) {
-	    if (n < min || n > max || n !== (n < 0 ? mathceil(n) : mathfloor(n))) {
+	    if (n < min || n > max || n !== mathfloor(n)) {
 	      throw Error
 	       (bignumberError + (name || 'Argument') + (typeof n == 'number'
 	         ? n < min || n > max ? ' out of range: ' : ' not an integer: '
@@ -2862,7 +2914,7 @@
 	  BigNumber['default'] = BigNumber.BigNumber = BigNumber;
 
 	  // AMD.
-	  if (module.exports) {
+	  if ( module.exports) {
 	    module.exports = BigNumber;
 
 	  // Browser.
@@ -2886,7 +2938,7 @@
 	 */
 
 	(function (global, factory) {
-	    if (module.exports) {
+	    if ( module.exports) {
 	        module.exports = factory();
 	    } else {
 	        global.numeral = factory();
@@ -3888,7 +3940,7 @@
 
 	var moment = createCommonjsModule(function (module, exports) {
 	(function (global, factory) {
-	    module.exports = factory();
+	     module.exports = factory() ;
 	}(commonjsGlobal, (function () {
 	    var hookCallback;
 
@@ -5026,22 +5078,36 @@
 	    function createDate (y, m, d, h, M, s, ms) {
 	        // can't just apply() to create a date:
 	        // https://stackoverflow.com/q/181348
-	        var date = new Date(y, m, d, h, M, s, ms);
-
+	        var date;
 	        // the date constructor remaps years 0-99 to 1900-1999
-	        if (y < 100 && y >= 0 && isFinite(date.getFullYear())) {
-	            date.setFullYear(y);
+	        if (y < 100 && y >= 0) {
+	            // preserve leap years using a full 400 year cycle, then reset
+	            date = new Date(y + 400, m, d, h, M, s, ms);
+	            if (isFinite(date.getFullYear())) {
+	                date.setFullYear(y);
+	            }
+	        } else {
+	            date = new Date(y, m, d, h, M, s, ms);
 	        }
+
 	        return date;
 	    }
 
 	    function createUTCDate (y) {
-	        var date = new Date(Date.UTC.apply(null, arguments));
-
+	        var date;
 	        // the Date.UTC function remaps years 0-99 to 1900-1999
-	        if (y < 100 && y >= 0 && isFinite(date.getUTCFullYear())) {
-	            date.setUTCFullYear(y);
+	        if (y < 100 && y >= 0) {
+	            var args = Array.prototype.slice.call(arguments);
+	            // preserve leap years using a full 400 year cycle, then reset
+	            args[0] = y + 400;
+	            date = new Date(Date.UTC.apply(null, args));
+	            if (isFinite(date.getUTCFullYear())) {
+	                date.setUTCFullYear(y);
+	            }
+	        } else {
+	            date = new Date(Date.UTC.apply(null, arguments));
 	        }
+
 	        return date;
 	    }
 
@@ -5143,7 +5209,7 @@
 
 	    var defaultLocaleWeek = {
 	        dow : 0, // Sunday is the first day of the week.
-	        doy : 6  // The week that contains Jan 1st is the first week of the year.
+	        doy : 6  // The week that contains Jan 6th is the first week of the year.
 	    };
 
 	    function localeFirstDayOfWeek () {
@@ -5252,25 +5318,28 @@
 	    }
 
 	    // LOCALES
+	    function shiftWeekdays (ws, n) {
+	        return ws.slice(n, 7).concat(ws.slice(0, n));
+	    }
 
 	    var defaultLocaleWeekdays = 'Sunday_Monday_Tuesday_Wednesday_Thursday_Friday_Saturday'.split('_');
 	    function localeWeekdays (m, format) {
-	        if (!m) {
-	            return isArray(this._weekdays) ? this._weekdays :
-	                this._weekdays['standalone'];
-	        }
-	        return isArray(this._weekdays) ? this._weekdays[m.day()] :
-	            this._weekdays[this._weekdays.isFormat.test(format) ? 'format' : 'standalone'][m.day()];
+	        var weekdays = isArray(this._weekdays) ? this._weekdays :
+	            this._weekdays[(m && m !== true && this._weekdays.isFormat.test(format)) ? 'format' : 'standalone'];
+	        return (m === true) ? shiftWeekdays(weekdays, this._week.dow)
+	            : (m) ? weekdays[m.day()] : weekdays;
 	    }
 
 	    var defaultLocaleWeekdaysShort = 'Sun_Mon_Tue_Wed_Thu_Fri_Sat'.split('_');
 	    function localeWeekdaysShort (m) {
-	        return (m) ? this._weekdaysShort[m.day()] : this._weekdaysShort;
+	        return (m === true) ? shiftWeekdays(this._weekdaysShort, this._week.dow)
+	            : (m) ? this._weekdaysShort[m.day()] : this._weekdaysShort;
 	    }
 
 	    var defaultLocaleWeekdaysMin = 'Su_Mo_Tu_We_Th_Fr_Sa'.split('_');
 	    function localeWeekdaysMin (m) {
-	        return (m) ? this._weekdaysMin[m.day()] : this._weekdaysMin;
+	        return (m === true) ? shiftWeekdays(this._weekdaysMin, this._week.dow)
+	            : (m) ? this._weekdaysMin[m.day()] : this._weekdaysMin;
 	    }
 
 	    function handleStrictParse$1(weekdayName, format, strict) {
@@ -6019,13 +6088,13 @@
 	                    weekdayOverflow = true;
 	                }
 	            } else if (w.e != null) {
-	                // local weekday -- counting starts from begining of week
+	                // local weekday -- counting starts from beginning of week
 	                weekday = w.e + dow;
 	                if (w.e < 0 || w.e > 6) {
 	                    weekdayOverflow = true;
 	                }
 	            } else {
-	                // default to begining of week
+	                // default to beginning of week
 	                weekday = dow;
 	            }
 	        }
@@ -6619,7 +6688,7 @@
 	            years = normalizedInput.year || 0,
 	            quarters = normalizedInput.quarter || 0,
 	            months = normalizedInput.month || 0,
-	            weeks = normalizedInput.week || 0,
+	            weeks = normalizedInput.week || normalizedInput.isoWeek || 0,
 	            days = normalizedInput.day || 0,
 	            hours = normalizedInput.hour || 0,
 	            minutes = normalizedInput.minute || 0,
@@ -6923,7 +6992,7 @@
 	                ms : toInt(absRound(match[MILLISECOND] * 1000)) * sign // the millisecond decimal point is included in the match
 	            };
 	        } else if (!!(match = isoRegex.exec(input))) {
-	            sign = (match[1] === '-') ? -1 : (match[1] === '+') ? 1 : 1;
+	            sign = (match[1] === '-') ? -1 : 1;
 	            duration = {
 	                y : parseIso(match[2], sign),
 	                M : parseIso(match[3], sign),
@@ -6965,7 +7034,7 @@
 	    }
 
 	    function positiveMomentsDifference(base, other) {
-	        var res = {milliseconds: 0, months: 0};
+	        var res = {};
 
 	        res.months = other.month() - base.month() +
 	            (other.year() - base.year()) * 12;
@@ -7074,7 +7143,7 @@
 	        if (!(this.isValid() && localInput.isValid())) {
 	            return false;
 	        }
-	        units = normalizeUnits(!isUndefined(units) ? units : 'millisecond');
+	        units = normalizeUnits(units) || 'millisecond';
 	        if (units === 'millisecond') {
 	            return this.valueOf() > localInput.valueOf();
 	        } else {
@@ -7087,7 +7156,7 @@
 	        if (!(this.isValid() && localInput.isValid())) {
 	            return false;
 	        }
-	        units = normalizeUnits(!isUndefined(units) ? units : 'millisecond');
+	        units = normalizeUnits(units) || 'millisecond';
 	        if (units === 'millisecond') {
 	            return this.valueOf() < localInput.valueOf();
 	        } else {
@@ -7096,9 +7165,14 @@
 	    }
 
 	    function isBetween (from, to, units, inclusivity) {
+	        var localFrom = isMoment(from) ? from : createLocal(from),
+	            localTo = isMoment(to) ? to : createLocal(to);
+	        if (!(this.isValid() && localFrom.isValid() && localTo.isValid())) {
+	            return false;
+	        }
 	        inclusivity = inclusivity || '()';
-	        return (inclusivity[0] === '(' ? this.isAfter(from, units) : !this.isBefore(from, units)) &&
-	            (inclusivity[1] === ')' ? this.isBefore(to, units) : !this.isAfter(to, units));
+	        return (inclusivity[0] === '(' ? this.isAfter(localFrom, units) : !this.isBefore(localFrom, units)) &&
+	            (inclusivity[1] === ')' ? this.isBefore(localTo, units) : !this.isAfter(localTo, units));
 	    }
 
 	    function isSame (input, units) {
@@ -7107,7 +7181,7 @@
 	        if (!(this.isValid() && localInput.isValid())) {
 	            return false;
 	        }
-	        units = normalizeUnits(units || 'millisecond');
+	        units = normalizeUnits(units) || 'millisecond';
 	        if (units === 'millisecond') {
 	            return this.valueOf() === localInput.valueOf();
 	        } else {
@@ -7117,11 +7191,11 @@
 	    }
 
 	    function isSameOrAfter (input, units) {
-	        return this.isSame(input, units) || this.isAfter(input,units);
+	        return this.isSame(input, units) || this.isAfter(input, units);
 	    }
 
 	    function isSameOrBefore (input, units) {
-	        return this.isSame(input, units) || this.isBefore(input,units);
+	        return this.isSame(input, units) || this.isBefore(input, units);
 	    }
 
 	    function diff (input, units, asFloat) {
@@ -7298,62 +7372,130 @@
 	        return this._locale;
 	    }
 
+	    var MS_PER_SECOND = 1000;
+	    var MS_PER_MINUTE = 60 * MS_PER_SECOND;
+	    var MS_PER_HOUR = 60 * MS_PER_MINUTE;
+	    var MS_PER_400_YEARS = (365 * 400 + 97) * 24 * MS_PER_HOUR;
+
+	    // actual modulo - handles negative numbers (for dates before 1970):
+	    function mod$1(dividend, divisor) {
+	        return (dividend % divisor + divisor) % divisor;
+	    }
+
+	    function localStartOfDate(y, m, d) {
+	        // the date constructor remaps years 0-99 to 1900-1999
+	        if (y < 100 && y >= 0) {
+	            // preserve leap years using a full 400 year cycle, then reset
+	            return new Date(y + 400, m, d) - MS_PER_400_YEARS;
+	        } else {
+	            return new Date(y, m, d).valueOf();
+	        }
+	    }
+
+	    function utcStartOfDate(y, m, d) {
+	        // Date.UTC remaps years 0-99 to 1900-1999
+	        if (y < 100 && y >= 0) {
+	            // preserve leap years using a full 400 year cycle, then reset
+	            return Date.UTC(y + 400, m, d) - MS_PER_400_YEARS;
+	        } else {
+	            return Date.UTC(y, m, d);
+	        }
+	    }
+
 	    function startOf (units) {
+	        var time;
 	        units = normalizeUnits(units);
-	        // the following switch intentionally omits break keywords
-	        // to utilize falling through the cases.
+	        if (units === undefined || units === 'millisecond' || !this.isValid()) {
+	            return this;
+	        }
+
+	        var startOfDate = this._isUTC ? utcStartOfDate : localStartOfDate;
+
 	        switch (units) {
 	            case 'year':
-	                this.month(0);
-	                /* falls through */
+	                time = startOfDate(this.year(), 0, 1);
+	                break;
 	            case 'quarter':
+	                time = startOfDate(this.year(), this.month() - this.month() % 3, 1);
+	                break;
 	            case 'month':
-	                this.date(1);
-	                /* falls through */
+	                time = startOfDate(this.year(), this.month(), 1);
+	                break;
 	            case 'week':
+	                time = startOfDate(this.year(), this.month(), this.date() - this.weekday());
+	                break;
 	            case 'isoWeek':
+	                time = startOfDate(this.year(), this.month(), this.date() - (this.isoWeekday() - 1));
+	                break;
 	            case 'day':
 	            case 'date':
-	                this.hours(0);
-	                /* falls through */
+	                time = startOfDate(this.year(), this.month(), this.date());
+	                break;
 	            case 'hour':
-	                this.minutes(0);
-	                /* falls through */
+	                time = this._d.valueOf();
+	                time -= mod$1(time + (this._isUTC ? 0 : this.utcOffset() * MS_PER_MINUTE), MS_PER_HOUR);
+	                break;
 	            case 'minute':
-	                this.seconds(0);
-	                /* falls through */
+	                time = this._d.valueOf();
+	                time -= mod$1(time, MS_PER_MINUTE);
+	                break;
 	            case 'second':
-	                this.milliseconds(0);
+	                time = this._d.valueOf();
+	                time -= mod$1(time, MS_PER_SECOND);
+	                break;
 	        }
 
-	        // weeks are a special case
-	        if (units === 'week') {
-	            this.weekday(0);
-	        }
-	        if (units === 'isoWeek') {
-	            this.isoWeekday(1);
-	        }
-
-	        // quarters are also special
-	        if (units === 'quarter') {
-	            this.month(Math.floor(this.month() / 3) * 3);
-	        }
-
+	        this._d.setTime(time);
+	        hooks.updateOffset(this, true);
 	        return this;
 	    }
 
 	    function endOf (units) {
+	        var time;
 	        units = normalizeUnits(units);
-	        if (units === undefined || units === 'millisecond') {
+	        if (units === undefined || units === 'millisecond' || !this.isValid()) {
 	            return this;
 	        }
 
-	        // 'date' is an alias for 'day', so it should be considered as such.
-	        if (units === 'date') {
-	            units = 'day';
+	        var startOfDate = this._isUTC ? utcStartOfDate : localStartOfDate;
+
+	        switch (units) {
+	            case 'year':
+	                time = startOfDate(this.year() + 1, 0, 1) - 1;
+	                break;
+	            case 'quarter':
+	                time = startOfDate(this.year(), this.month() - this.month() % 3 + 3, 1) - 1;
+	                break;
+	            case 'month':
+	                time = startOfDate(this.year(), this.month() + 1, 1) - 1;
+	                break;
+	            case 'week':
+	                time = startOfDate(this.year(), this.month(), this.date() - this.weekday() + 7) - 1;
+	                break;
+	            case 'isoWeek':
+	                time = startOfDate(this.year(), this.month(), this.date() - (this.isoWeekday() - 1) + 7) - 1;
+	                break;
+	            case 'day':
+	            case 'date':
+	                time = startOfDate(this.year(), this.month(), this.date() + 1) - 1;
+	                break;
+	            case 'hour':
+	                time = this._d.valueOf();
+	                time += MS_PER_HOUR - mod$1(time + (this._isUTC ? 0 : this.utcOffset() * MS_PER_MINUTE), MS_PER_HOUR) - 1;
+	                break;
+	            case 'minute':
+	                time = this._d.valueOf();
+	                time += MS_PER_MINUTE - mod$1(time, MS_PER_MINUTE) - 1;
+	                break;
+	            case 'second':
+	                time = this._d.valueOf();
+	                time += MS_PER_SECOND - mod$1(time, MS_PER_SECOND) - 1;
+	                break;
 	        }
 
-	        return this.startOf(units).add(1, (units === 'isoWeek' ? 'week' : units)).subtract(1, 'ms');
+	        this._d.setTime(time);
+	        hooks.updateOffset(this, true);
+	        return this;
 	    }
 
 	    function valueOf () {
@@ -8059,10 +8201,14 @@
 
 	        units = normalizeUnits(units);
 
-	        if (units === 'month' || units === 'year') {
-	            days   = this._days   + milliseconds / 864e5;
+	        if (units === 'month' || units === 'quarter' || units === 'year') {
+	            days = this._days + milliseconds / 864e5;
 	            months = this._months + daysToMonths(days);
-	            return units === 'month' ? months : months / 12;
+	            switch (units) {
+	                case 'month':   return months;
+	                case 'quarter': return months / 3;
+	                case 'year':    return months / 12;
+	            }
 	        } else {
 	            // handle milliseconds separately because of floating point math errors (issue #1867)
 	            days = this._days + Math.round(monthsToDays(this._months));
@@ -8105,6 +8251,7 @@
 	    var asDays         = makeAs('d');
 	    var asWeeks        = makeAs('w');
 	    var asMonths       = makeAs('M');
+	    var asQuarters     = makeAs('Q');
 	    var asYears        = makeAs('y');
 
 	    function clone$1 () {
@@ -8296,6 +8443,7 @@
 	    proto$2.asDays         = asDays;
 	    proto$2.asWeeks        = asWeeks;
 	    proto$2.asMonths       = asMonths;
+	    proto$2.asQuarters     = asQuarters;
 	    proto$2.asYears        = asYears;
 	    proto$2.valueOf        = valueOf$1;
 	    proto$2._bubble        = bubble;
@@ -8340,7 +8488,7 @@
 	    // Side effect imports
 
 
-	    hooks.version = '2.22.2';
+	    hooks.version = '2.24.0';
 
 	    setHookCallback(createLocal);
 
@@ -8381,7 +8529,7 @@
 	        TIME: 'HH:mm',                                  // <input type="time" />
 	        TIME_SECONDS: 'HH:mm:ss',                       // <input type="time" step="1" />
 	        TIME_MS: 'HH:mm:ss.SSS',                        // <input type="time" step="0.001" />
-	        WEEK: 'YYYY-[W]WW',                             // <input type="week" />
+	        WEEK: 'GGGG-[W]WW',                             // <input type="week" />
 	        MONTH: 'YYYY-MM'                                // <input type="month" />
 	    };
 
@@ -8443,8 +8591,8 @@
 	  // the browser, add `_` as a global object.
 	  // (`nodeType` is checked to ensure that `module`
 	  // and `exports` are not HTML elements.)
-	  if (!exports.nodeType) {
-	    if (!module.nodeType && module.exports) {
+	  if ( !exports.nodeType) {
+	    if ( !module.nodeType && module.exports) {
 	      exports = module.exports = _;
 	    }
 	    exports._ = _;
@@ -9733,7 +9881,7 @@
 	  // Optimize `isFunction` if appropriate. Work around some typeof bugs in old v8,
 	  // IE 11 (#1621), Safari 8 (#1929), and PhantomJS (#2236).
 	  var nodelist = root.document && root.document.childNodes;
-	  if (typeof Int8Array != 'object' && typeof nodelist != 'function') {
+	  if (typeof /./ != 'function' && typeof Int8Array != 'object' && typeof nodelist != 'function') {
 	    _.isFunction = function(obj) {
 	      return typeof obj == 'function' || false;
 	    };
@@ -10073,7 +10221,7 @@
 	});
 	var underscore_1 = underscore._;
 
-	var sprintf = createCommonjsModule(function (module, exports) {
+	var sprintf$1 = createCommonjsModule(function (module, exports) {
 	/* global window, exports, define */
 
 	!function() {
@@ -10089,11 +10237,11 @@
 	        not_json: /[^j]/,
 	        text: /^[^\x25]+/,
 	        modulo: /^\x25{2}/,
-	        placeholder: /^\x25(?:([1-9]\d*)\$|\(([^\)]+)\))?(\+)?(0|'[^$])?(-)?(\d+)?(?:\.(\d+))?([b-gijostTuvxX])/,
+	        placeholder: /^\x25(?:([1-9]\d*)\$|\(([^)]+)\))?(\+)?(0|'[^$])?(-)?(\d+)?(?:\.(\d+))?([b-gijostTuvxX])/,
 	        key: /^([a-z_][a-z_\d]*)/i,
 	        key_access: /^\.([a-z_][a-z_\d]*)/i,
 	        index_access: /^\[(\d+)\]/,
-	        sign: /^[\+\-]/
+	        sign: /^[+-]/
 	    };
 
 	    function sprintf(key) {
@@ -10106,42 +10254,42 @@
 	    }
 
 	    function sprintf_format(parse_tree, argv) {
-	        var cursor = 1, tree_length = parse_tree.length, arg, output = '', i, k, match, pad, pad_character, pad_length, is_positive, sign;
+	        var cursor = 1, tree_length = parse_tree.length, arg, output = '', i, k, ph, pad, pad_character, pad_length, is_positive, sign;
 	        for (i = 0; i < tree_length; i++) {
 	            if (typeof parse_tree[i] === 'string') {
 	                output += parse_tree[i];
 	            }
-	            else if (Array.isArray(parse_tree[i])) {
-	                match = parse_tree[i]; // convenience purposes only
-	                if (match[2]) { // keyword argument
+	            else if (typeof parse_tree[i] === 'object') {
+	                ph = parse_tree[i]; // convenience purposes only
+	                if (ph.keys) { // keyword argument
 	                    arg = argv[cursor];
-	                    for (k = 0; k < match[2].length; k++) {
-	                        if (!arg.hasOwnProperty(match[2][k])) {
-	                            throw new Error(sprintf('[sprintf] property "%s" does not exist', match[2][k]))
+	                    for (k = 0; k < ph.keys.length; k++) {
+	                        if (arg == undefined) {
+	                            throw new Error(sprintf('[sprintf] Cannot access property "%s" of undefined value "%s"', ph.keys[k], ph.keys[k-1]))
 	                        }
-	                        arg = arg[match[2][k]];
+	                        arg = arg[ph.keys[k]];
 	                    }
 	                }
-	                else if (match[1]) { // positional argument (explicit)
-	                    arg = argv[match[1]];
+	                else if (ph.param_no) { // positional argument (explicit)
+	                    arg = argv[ph.param_no];
 	                }
 	                else { // positional argument (implicit)
 	                    arg = argv[cursor++];
 	                }
 
-	                if (re.not_type.test(match[8]) && re.not_primitive.test(match[8]) && arg instanceof Function) {
+	                if (re.not_type.test(ph.type) && re.not_primitive.test(ph.type) && arg instanceof Function) {
 	                    arg = arg();
 	                }
 
-	                if (re.numeric_arg.test(match[8]) && (typeof arg !== 'number' && isNaN(arg))) {
+	                if (re.numeric_arg.test(ph.type) && (typeof arg !== 'number' && isNaN(arg))) {
 	                    throw new TypeError(sprintf('[sprintf] expecting number but found %T', arg))
 	                }
 
-	                if (re.number.test(match[8])) {
+	                if (re.number.test(ph.type)) {
 	                    is_positive = arg >= 0;
 	                }
 
-	                switch (match[8]) {
+	                switch (ph.type) {
 	                    case 'b':
 	                        arg = parseInt(arg, 10).toString(2);
 	                        break
@@ -10153,38 +10301,38 @@
 	                        arg = parseInt(arg, 10);
 	                        break
 	                    case 'j':
-	                        arg = JSON.stringify(arg, null, match[6] ? parseInt(match[6]) : 0);
+	                        arg = JSON.stringify(arg, null, ph.width ? parseInt(ph.width) : 0);
 	                        break
 	                    case 'e':
-	                        arg = match[7] ? parseFloat(arg).toExponential(match[7]) : parseFloat(arg).toExponential();
+	                        arg = ph.precision ? parseFloat(arg).toExponential(ph.precision) : parseFloat(arg).toExponential();
 	                        break
 	                    case 'f':
-	                        arg = match[7] ? parseFloat(arg).toFixed(match[7]) : parseFloat(arg);
+	                        arg = ph.precision ? parseFloat(arg).toFixed(ph.precision) : parseFloat(arg);
 	                        break
 	                    case 'g':
-	                        arg = match[7] ? String(Number(arg.toPrecision(match[7]))) : parseFloat(arg);
+	                        arg = ph.precision ? String(Number(arg.toPrecision(ph.precision))) : parseFloat(arg);
 	                        break
 	                    case 'o':
 	                        arg = (parseInt(arg, 10) >>> 0).toString(8);
 	                        break
 	                    case 's':
 	                        arg = String(arg);
-	                        arg = (match[7] ? arg.substring(0, match[7]) : arg);
+	                        arg = (ph.precision ? arg.substring(0, ph.precision) : arg);
 	                        break
 	                    case 't':
 	                        arg = String(!!arg);
-	                        arg = (match[7] ? arg.substring(0, match[7]) : arg);
+	                        arg = (ph.precision ? arg.substring(0, ph.precision) : arg);
 	                        break
 	                    case 'T':
 	                        arg = Object.prototype.toString.call(arg).slice(8, -1).toLowerCase();
-	                        arg = (match[7] ? arg.substring(0, match[7]) : arg);
+	                        arg = (ph.precision ? arg.substring(0, ph.precision) : arg);
 	                        break
 	                    case 'u':
 	                        arg = parseInt(arg, 10) >>> 0;
 	                        break
 	                    case 'v':
 	                        arg = arg.valueOf();
-	                        arg = (match[7] ? arg.substring(0, match[7]) : arg);
+	                        arg = (ph.precision ? arg.substring(0, ph.precision) : arg);
 	                        break
 	                    case 'x':
 	                        arg = (parseInt(arg, 10) >>> 0).toString(16);
@@ -10193,21 +10341,21 @@
 	                        arg = (parseInt(arg, 10) >>> 0).toString(16).toUpperCase();
 	                        break
 	                }
-	                if (re.json.test(match[8])) {
+	                if (re.json.test(ph.type)) {
 	                    output += arg;
 	                }
 	                else {
-	                    if (re.number.test(match[8]) && (!is_positive || match[3])) {
+	                    if (re.number.test(ph.type) && (!is_positive || ph.sign)) {
 	                        sign = is_positive ? '+' : '-';
 	                        arg = arg.toString().replace(re.sign, '');
 	                    }
 	                    else {
 	                        sign = '';
 	                    }
-	                    pad_character = match[4] ? match[4] === '0' ? '0' : match[4].charAt(1) : ' ';
-	                    pad_length = match[6] - (sign + arg).length;
-	                    pad = match[6] ? (pad_length > 0 ? pad_character.repeat(pad_length) : '') : '';
-	                    output += match[5] ? sign + arg + pad : (pad_character === '0' ? sign + pad + arg : pad + sign + arg);
+	                    pad_character = ph.pad_char ? ph.pad_char === '0' ? '0' : ph.pad_char.charAt(1) : ' ';
+	                    pad_length = ph.width - (sign + arg).length;
+	                    pad = ph.width ? (pad_length > 0 ? pad_character.repeat(pad_length) : '') : '';
+	                    output += ph.align ? sign + arg + pad : (pad_character === '0' ? sign + pad + arg : pad + sign + arg);
 	                }
 	            }
 	        }
@@ -10258,7 +10406,20 @@
 	                if (arg_names === 3) {
 	                    throw new Error('[sprintf] mixing positional and named placeholders is not (yet) supported')
 	                }
-	                parse_tree.push(match);
+
+	                parse_tree.push(
+	                    {
+	                        placeholder: match[0],
+	                        param_no:    match[1],
+	                        keys:        match[2],
+	                        sign:        match[3],
+	                        pad_char:    match[4],
+	                        align:       match[5],
+	                        width:       match[6],
+	                        precision:   match[7],
+	                        type:        match[8]
+	                    }
+	                );
 	            }
 	            else {
 	                throw new SyntaxError('[sprintf] unexpected placeholder')
@@ -10281,7 +10442,7 @@
 	        window['vsprintf'] = vsprintf;
 	    }
 	    /* eslint-enable quote-props */
-	}();
+	}(); // eslint-disable-line
 	});
 
 	// OrdMap {{{1
@@ -10306,6 +10467,7 @@
 		this._setHandlers = {};
 	}
 
+	Object.defineProperty(OrdMap, 'name', {value: 'OrdMap'});
 	OrdMap.prototype = Object.create(Object.prototype);
 	OrdMap.prototype.constructor = OrdMap;
 
@@ -10366,7 +10528,9 @@
 		}
 
 		for (var i = 0; i < x._keys.length; i += 1) {
-			result.set(x._keys[i], x._map[x._keys[i]]);
+			if (x._map[x._keys[i]] !== undefined) {
+				result.set(x._keys[i], x._map[x._keys[i]]);
+			}
 		}
 
 		return result;
@@ -10556,7 +10720,7 @@
 	 */
 
 	OrdMap.prototype.size = function () {
-		return this._keys.length;
+		return this._size;
 	};
 
 	/**
@@ -10647,6 +10811,7 @@
 
 	OrdMap.prototype.mergeWith = function (o) {
 		var self = this;
+		var numSet = 0;
 
 		if (!(o instanceof OrdMap)) {
 			throw new Error('Call Error: `o` must be an instance of OrdMap');
@@ -10655,8 +10820,11 @@
 		o.each(function (v, k) {
 			if (!self.isSet(k)) {
 				self.set(k, v);
+				numSet += 1;
 			}
 		});
+
+		return numSet;
 	};
 
 	// #_changeKeyIndex {{{2
@@ -10667,6 +10835,169 @@
 		var key = self._keys[oldIndex];
 		self._keys.splice(oldIndex, 1);
 		self._keys.splice(newIndex, 0, key);
+	};
+
+	// Lock {{{1
+	// Constructor {{{2
+
+	/**
+	 * An implementation of a counting semaphore for JavaScript.
+	 * @class
+	 */
+
+	var Lock = function (name, opts) {
+		var self = this;
+
+		self._opts = opts || {};
+
+		if (self._opts.debug == null) {
+			self._opts.debug = true;
+		}
+
+		self._name = name || '#' + (Lock._id++);
+		self._lockCount = 0;
+		self._onUnlock = [];
+
+		if (!self._opts.debug) {
+			self.debug = NOP;
+		}
+	};
+
+	Lock._id = 1;
+
+	mixinDebugging(Lock, function () {
+		return 'LOCK - ' + this._name + ' (level ' + this._lockCount + ')';
+	});
+
+	// #lock {{{2
+
+	/**
+	 * Engage the lock.  A lock can be engaged multiple times.  Each lock operation must be unlocked
+	 * separately to fully disengage the lock.
+	 *
+	 * @method
+	 */
+
+	Lock.prototype.lock = function (why) {
+		var self = this;
+
+		this._lockCount += 1;
+
+		var msg = 'Locking to level: ' + self._lockCount;
+
+		if (why != null) {
+			msg += ' - ' + why;
+		}
+
+		self.debug(null, msg);
+	};
+
+	// #unlock {{{2
+
+	/**
+	 * Disengage the lock.  A lock can be engaged multiple times.  Each lock operation must be unlocked
+	 * separately to fully disengage the lock.
+	 *
+	 * @method
+	 */
+
+	Lock.prototype.unlock = function () {
+		var self = this;
+
+		self._lockCount -= 1;
+		self.debug(null, 'Unlocking to level: ' + self._lockCount);
+
+		// If we're completely unlocked, start going through the functions that were registered to be run.
+		// The only problem is that these functions can cause us to be locked again.  If that happens, we
+		// abort.  The functions to run are a queue, and when we become unlocked we'll just resume running
+		// the functions in the queue.
+
+		var onUnlockLen = self._onUnlock.length;
+		var i = 0;
+
+		while (self._onUnlock.length > 0 && !self.isLocked()) {
+			i += 1;
+			var onUnlock = self._onUnlock.shift();
+			self.debug(null, 'Running onUnlock function (%d of %d) - %s', i, onUnlockLen, onUnlock.info || '[NO INFO]');
+			onUnlock.f();
+		}
+	};
+
+	// #completelyUnlock {{{2
+
+	Lock.prototype.completelyUnlock = function () {
+		var self = this;
+
+		while (self.isLocked()) {
+			self.unlock();
+		}
+	};
+
+	// #isLocked {{{2
+
+	/**
+	 * Check to see if the lock is engaged.
+	 *
+	 * @method
+	 *
+	 * @returns {boolean} True if the lock is engaged, false if it's disengaged.
+	 */
+
+	Lock.prototype.isLocked = function () {
+		var self = this;
+
+		return self._lockCount !== 0;
+	};
+
+	// #onUnlock {{{2
+
+	/**
+	 * Register a function to call when the lock is fully disengaged (i.e. all locks have been
+	 * unlocked).
+	 *
+	 * @method
+	 *
+	 * @param {function} f Function to call when the lock is disengaged.
+	 */
+
+	Lock.prototype.onUnlock = function (f, info) {
+		var self = this;
+
+		// If we're not already locked, there's no point in queueing it up, just do it.  This can simplify
+		// logic in callers (i.e. they don't have to do the check).
+
+		if (!self.isLocked()) {
+			return f();
+		}
+
+		self._onUnlock.push({
+			f: f,
+			info: info
+		});
+
+		self.debug(null, 'Saved onUnlock function (#%d) - %s', self._onUnlock.length, info || '[NO INFO]');
+	};
+
+	// #flushUnlockQueue
+
+	Lock.prototype.flushUnlockQueue = function () {
+		var self = this;
+		var count = self._onUnlock.length;
+		if (count > 0) {
+			var info = underscore.map(underscore.pluck(self._onUnlock, 'info'), function (i) {
+				return i || '[NO INFO]';
+			});
+			self.debug(null, 'Flushing ' + count + ' onUnlock functions: %O', info);
+			self._onUnlock = [];
+		}
+	};
+
+	// #clear {{{2
+
+	Lock.prototype.clear = function () {
+		var self = this;
+		self.flushUnlockQueue();
+		self.completelyUnlock();
 	};
 
 	/**
@@ -10799,6 +11130,68 @@
 		};
 		cmpFn.time = cmpFn.date;
 		cmpFn.datetime = cmpFn.date;
+
+		// TODO: i18n
+		cmpFn.month = function (a, b) {
+			var trans = {'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
+				'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12};
+
+			var a_month = trans[a];
+			var b_month = trans[b];
+
+			return a_month == null ? -1
+				: b_month == null ? 1
+				: a_month < b_month ? -1
+				: a_month > b_month ? 1
+				: 0;
+		};
+
+		// TODO: i18n
+		cmpFn.day_of_week = function (a, b) {
+			var trans = {'Mon': 0, 'Tue': 1, 'Wed': 2, 'Thu': 3, 'Fri': 4, 'Sat': 5, 'Sun': 6};
+
+			var a_num = trans[a];
+			var b_num = trans[b];
+
+			return a_num == null ? -1
+				: b_num == null ? 1
+				: a_num < b_num ? -1
+				: a_num > b_num ? 1
+				: 0;
+		};
+
+		// TODO: i18n
+		cmpFn.year_and_month = function (a, b) {
+			var trans = {'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
+				'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12};
+
+			var regexp = /^(\d{4}) (\w{3})$/;
+			var m;
+
+			var a_year, a_month, b_year, b_month;
+
+			if ((m = regexp.exec(a)) != null) {
+				a_year = toInt(m[1]);
+				a_month = trans[m[2]];
+			}
+			if (m == null || a_month == null) {
+				return -1;
+			}
+
+			if ((m = regexp.exec(b)) != null) {
+				b_year = toInt(m[1]);
+				b_month = trans[m[2]];
+			}
+			if (m == null || b_month == null) {
+				return 1;
+			}
+
+			return a_year < b_year ? -1
+				: a_year > b_year ? 1
+				: a_month < b_month ? -1
+				: a_month > b_month ? 1
+				: 0;
+		};
 
 		// Strings, numbers, and currency are stored as JavaScript primitives, so using the builtin
 		// operators to compare them is OK.
@@ -11012,6 +11405,25 @@
 		})();
 	}
 
+	function asyncChain(fns, args, done) {
+		var self = this;
+		if (!underscore.isArray(fns)) {
+			throw new Error('Call Error: `fns` must be an array');
+		}
+		if (!underscore.isArray(args)) {
+			throw new Error('Call Error: `args` must be an array');
+		}
+
+		fns = shallowCopy(fns);
+		var g = function () {
+			if (fns.length === 0) {
+				return done();
+			}
+			fns.shift().apply(self, args.concat(g));
+		};
+		return g();
+	}
+
 	/**
 	 * Partial application of a function.  Returns a new function that is a version of the argument
 	 * with some parameters already bound.  Also called Schönfinkelization.
@@ -11092,7 +11504,7 @@
 		var re_date = new RegExp(/^\d{4}-\d{2}-\d{2}$/);
 		var re_time = new RegExp(/^\d{2}:\d{2}:\d{2}$/);
 		var re_datetime = new RegExp(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
-	  var re_number = new RegExp(/(^-?[1-9]{1}[0-9]{0,2}(,?\d{3})*(\.\d+)?(e[+-]?\d+)?$)|(^-?0?\.\d+(e[+-]?\d+)?$)/);
+	  var re_number = new RegExp(/(^-?[1-9]{1}[0-9]{0,2}(,?\d{3})*(\.\d+)?(e[+-]?\d+)?$)|(^0(e[+-]?\d+)?$)|(^-?0?\.\d+(e[+-]?\d+)?$)/);
 	  return function p(s) {
 			var guess;
 			if (re_date.test(s)) {
@@ -11129,7 +11541,9 @@
 				throw new Error('Call Error: `resultType` must be null or a string');
 			}
 
-			resultType = resultType || 'number';
+			if (resultType == null) {
+				resultType = 'number';
+			}
 
 			if (['number', 'string'].indexOf(resultType) < 0) {
 				throw new Error('Call Error: `resultType` must be one of: ["number", "string"]');
@@ -11292,6 +11706,20 @@
 		return true;
 	}
 
+	/**
+	 * Call an asynchronous function for each element in a list.
+	 *
+	 * @param {object[]} args
+	 * The list to iterate over.
+	 *
+	 * @param {function} fun
+	 * An asynchronous function.  The arguments passed to it are: (1) the next element of `args`, and
+	 * (2) a callback function to continue iterating.
+	 *
+	 * @param {function} done
+	 * A function called when we're done.
+	 */
+
 	function asyncEach(args, fun, done) {
 		if (!underscore.isArray(args)) {
 			throw new Error('Call Error: `args` must be an array');
@@ -11304,13 +11732,14 @@
 		}
 
 		args = shallowCopy(args);
+		var i = 0;
 		function g() {
 			if (args.length === 0) {
 				return done();
 			}
-			fun(args.shift(), g);
+			return fun(args.shift(), i++, g);
 		}
-		g();
+		return g();
 	}
 
 	/**
@@ -11638,6 +12067,36 @@
 	}
 
 	/**
+	 * Copy properties from one object to another.
+	 *
+	 * @param {object} src
+	 * Where to copy properties from.
+	 *
+	 * @param {object} dest
+	 * Where to copy properties to.
+	 *
+	 * @param {string[]} props
+	 * Array of properties to copy.
+	 *
+	 * @param {object} opts
+	 * Additional options.
+	 *
+	 * @param {boolean} [opts.followPrototype=false]
+	 * If true, follow the prototype chain; the default behavior is that `src` must have its own
+	 * property with the specified name for it to be copied.
+	 */
+
+	function copyProps(src, dest, props, opts) {
+		opts = opts || {};
+
+		underscore.each(props, function (p) {
+			if (src.hasOwnProperty(p) || (opts.followPrototype && p in src)) {
+				dest[p] = src[p];
+			}
+		});
+	}
+
+	/**
 	 * Throw an exception if a property is missing.
 	 *
 	 * @param {function} exn Constructor used to instantiate an exception if an error arises.
@@ -11933,7 +12392,7 @@
 				return sort(data.slice(0, pivot), function (left) {
 					return sort(data.slice(pivot), function (right) {
 						var fn = function () {
-							return cont(merge(left, right, cont));
+							return cont(merge(left, right));
 						};
 						step += 1;
 						if (step % stepsBeforeUpdate === 0) {
@@ -12213,6 +12672,9 @@
 		subclass.prototype = Object.create(parent.prototype);
 		subclass.prototype.constructor = subclass;
 
+		//subclass.prototype.__ctor = subclass;
+		//subclass.prototype.__ctorname = name;
+
 		underscore.each(ptype, function (v, k) {
 			subclass.prototype[k] = v;
 		});
@@ -12253,8 +12715,26 @@
 	var mixinEventHandling = (function () {
 		var HANDLER_ID = 0;
 
-		return function (obj, name, events) {
+		return function (obj, events) {
 			obj.events = objFromArray(events);
+
+			var getName = function () {
+				return obj.toString === Object.toString
+					? obj.prototype.constructor.name
+					: obj.toString();
+			};
+
+			var getTag = function (self) {
+				if (typeof self.getDebugTag === 'function') {
+					return self.getDebugTag();
+				}
+				else if (typeof self.toString === 'function' && self.toString !== Object.toString) {
+					return self.toString();
+				}
+				else {
+					return obj.prototype.constructor.name.toUpperCase();
+				}
+			};
 
 			// #_initEventHandlers {{{3
 
@@ -12274,11 +12754,48 @@
 				}
 			};
 
+			// #echo {{{3
+
+			/**
+			 * Echo events from a source, reproducing them ourselves.
+			 *
+			 * @param {object} src
+			 * The source, it must have had `mixinEventHandling()` called on it as well.
+			 *
+			 * @param {string[]} evt
+			 * List of events to echo.
+			 *
+			 * @param {object} opts
+			 * Additional options to pass to the `on()` method.
+			 */
+
+			obj.prototype.echo = function (src, evt, opts) {
+				var self = this;
+
+				opts = opts || {};
+
+				self._initEventHandlers();
+
+				if (!underscore.isArray(evt)) {
+					evt = [evt];
+				}
+				underscore.each(evt, function (e, i) {
+					if (typeof e !== 'string') {
+						throw new Error('Call Error: `evt[' + i + ']` must be a string');
+					}
+					if (obj.events[e] === undefined) {
+						throw new Error('Unable to register handler on ' + getName() + ' for "' + e + '" event: no such event available');
+					}
+					src.on(e, function () {
+						self.fire(e);
+					}, opts);
+				});
+			};
+
 			// #on {{{3
 
 			obj.prototype.on = function (evt, cb, opts) {
-				var self = this
-					, myName = typeof name === 'function' ? name(self) : name;
+				var self = this;
 
 				opts = opts || {};
 
@@ -12290,12 +12807,13 @@
 
 				underscore.each(evt, function (e) {
 					if (obj.events[e] === undefined) {
-						throw new Error('Unable to register handler on ' + myName + ' for "' + e + '" event: no such event available');
+						throw new Error('Unable to register handler on ' + getName() + ' for "' + e + '" event: no such event available');
 					}
 
 					var handler = {
 						id: HANDLER_ID++,
 						who: opts.who,
+						info: opts.info,
 						cb: cb,
 						limit: opts.limit
 					};
@@ -12303,11 +12821,11 @@
 					self.eventHandlers[e].push(handler);
 					self.eventHandlersById[handler.id] = handler;
 
-					var msg = 'Adding "' + evt + '" event handler on ' + myName;
+					var msg = 'Adding "' + evt + '" event handler on ' + getName();
 					if (opts.who != null) {
 						msg += ' from ' + opts.who;
 					}
-					debug.info(myName + ' // ON', msg);
+					debug.info(getTag(self) + ' // ON', msg);
 				});
 
 				return self;
@@ -12316,8 +12834,7 @@
 			// #off {{{3
 
 			obj.prototype.off = function (evt, who, opts) {
-				var self = this
-					, myName = typeof name === 'function' ? name(self) : name;
+				var self = this;
 
 				opts = opts || {};
 
@@ -12331,25 +12848,30 @@
 				}
 
 				if (obj.events[evt] === undefined) {
-					throw new Error('Unable to register handler on ' + myName + ' for "' + evt + '" event: no such event available');
+					throw new Error('Unable to register handler on ' + getName() + ' for "' + evt + '" event: no such event available');
 				}
 
 				var newHandlers = [];
 
-				underscore.each(self.eventHandlers[evt], function (h) {
-					if (who == null || h.who === who) {
+				underscore.each(self.eventHandlers[evt], function (handler, i) {
+					if (handler == null) {
+						// This handler has been removed, e.g. due to reaching the invocation limit.
+						return;
+					}
+
+					if (who == null || handler.who === who) {
 						// Remove from the ID lookup.  This is used to allow event handlers to be removed while
 						// their event is being fired.
 
-						self.eventHandlersById[h.id] = null;
+						self.eventHandlersById[handler.id] = null;
 					}
 					else {
-						newHandlers.push(h);
+						newHandlers.push(handler);
 					}
 				});
 
 				if (!opts.silent) {
-					debug.info(myName + ' // OFF', 'Removed ' + (self.eventHandlers[evt].length - newHandlers.length) + ' handlers from ' + who + ' on "' + evt + '" event');
+					debug.info(getTag(self) + ' // OFF', 'Removed ' + (self.eventHandlers[evt].length - newHandlers.length) + ' handlers from ' + who + ' on "' + evt + '" event');
 				}
 
 				self.eventHandlers[evt] = newHandlers;
@@ -12376,8 +12898,7 @@
 				var self = this
 					, args = Array.prototype.slice.call(arguments)
 					, evt = args.shift()
-					, opts = args.shift() || {}
-					, myName = typeof name === 'function' ? name(self) : name;
+					, opts = args.shift() || {};
 
 				self._initEventHandlers();
 
@@ -12387,8 +12908,13 @@
 
 				var handlers = [];
 
-				for (var i = 0; i < self.eventHandlers[evt].length; i += 1) {
+				underscore.each(self.eventHandlers[evt], function (handler, i) {
 					var handler = self.eventHandlers[evt][i];
+
+					if (handler == null) {
+						// This handler has been removed, e.g. due to reaching the invocation limit.
+						return;
+					}
 
 					// Check to see if this handler is for someone we shouldn't be sending to.
 					//
@@ -12400,30 +12926,39 @@
 							((underscore.isArray(opts.notTo) && opts.notTo.indexOf(handler.who) >= 0)
 								|| (typeof opts.notTo === 'function' && opts.notTo(handler.who))
 								|| (typeof opts.notTo === 'object' && opts.notTo === handler.who))) {
-						continue;
+						return;
 					}
 
 					handlers.push({
 						handler: handler,
 						index: i
 					});
-				}
+				});
 
 				// Print a debugging message unless invoked with the silent option (used internally to prevent
 				// spamming millions of messages, which slows down the console).
 
 				if (!opts.silent) {
-					debug.info(myName + ' // FIRE', 'Triggering "%s" event on %d handlers: %O', evt, handlers.length, args);
+					debug.info(getTag(self) + ' // FIRE', 'Triggering %d handlers for "%s" event on %s: %O', handlers.length, evt, getName(), args);
 				}
 
-				underscore.each(handlers, function (h, i) {
+				// Execute all matching handlers in the order they were registered.  A break is added between
+				// each handler's invocation using setTimeout().  This allows user interface changes made a
+				// handler to be picked up by the browser.  An early handler is allowed to remove a later one.
+
+				asyncEach(handlers, function (h, i, next) {
 					if (self.eventHandlersById[h.handler.id] == null) {
 						// This handler has been removed since we started firing for this event.  This happens one
 						// an earlier event handler removes a later one.
 						return;
 					}
 
-					debug.info(myName + ' // FIRE', 'Executing "%s" handler: [%d/%d]', evt, i, handlers.length - 1);
+					if (h.handler.info != null) {
+						debug.info(getTag(self) + ' // FIRE', 'Executing "%s" handler (%d of %d) on %s: %s', evt, i+1, handlers.length, getName(), h.handler.info);
+					}
+					else {
+						debug.info(getTag(self) + ' // FIRE', 'Executing "%s" handler (%d of %d) on %s', evt, i+1, handlers.length, getName());
+					}
 					h.handler.cb.apply(null, args);
 
 					// Remove the handler if we've hit the limit of how many times we're supposed to invoke it.
@@ -12432,16 +12967,24 @@
 					if (h.handler.limit) {
 						h.handler.limit -= 1;
 						if (h.handler.limit <= 0) {
-							debug.info(myName + ' // FIRE', 'Removing "%s" handler [%d] after reaching invocation limit', evt, i);
+							debug.info(getTag(self) + ' // FIRE', 'Removing "%s" handler #%d from %s after reaching invocation limit', evt, i+1, getName());
 							self.eventHandlers[evt][h.index] = null;
 						}
 					}
+
+					return opts.async ? window.setTimeout(next) : next();
+				}, function () {
+					if (!opts.silent) {
+						debug.info(getTag(self) + ' // FIRE', 'Done triggering handlers for "%s" event on %s', evt, getName());
+					}
+
+					// Clean up handlers we removed (because they reached the limit).
+
+					self.eventHandlers[evt] = underscore.without(self.eventHandlers[evt], null);
 				});
-
-				// Clean up handlers we removed (because they reached the limit).
-
-				self.eventHandlers[evt] = underscore.without(self.eventHandlers[evt], null);
 			};
+
+			// }}}3
 		};
 	})();
 
@@ -12459,19 +13002,25 @@
 			else if (typeof tagStart === 'string') {
 				return tagStart;
 			}
+			else if (typeof self.getDebugTag === 'function') {
+				return self.getDebugTag();
+			}
+			else if (typeof self.toString === 'function' && self.toString !== Object.toString) {
+				return self.toString();
+			}
 			else {
-				return null;
+				return obj.prototype.constructor.name.toUpperCase();
 			}
 		};
 
 		obj.prototype.debug = function () {
 			var args = Array.prototype.slice.call(arguments);
-			debug.info.apply(null, Array.prototype.concat.call([getTag(this)], args));
-		};
-		obj.prototype.debug_tag = function () {
-			var args = Array.prototype.slice.call(arguments);
 			var tag = args.shift();
-			debug.info.apply(null, Array.prototype.concat.call([getTag(this) + ' // ' + tag], args));
+			var fullTag = getTag(this);
+			if (tag != null) {
+				fullTag += ' // ' + tag;
+			}
+			debug.info.apply(null, Array.prototype.concat.call([fullTag], args));
 		};
 	}
 
@@ -12483,14 +13032,20 @@
 		}
 
 		var getTag = function (self) {
-			if (typeof tagPrefix === 'function') {
-				return tagPrefix.call(self);
+			if (typeof tagStart === 'function') {
+				return tagStart.call(self);
 			}
-			else if (typeof tagPrefix === 'string') {
-				return tagPrefix;
+			else if (typeof tagStart === 'string') {
+				return tagStart;
+			}
+			else if (typeof self.getDebugTag === 'function') {
+				return self.getDebugTag();
+			}
+			else if (typeof self.toString === 'function' && self.toString !== Object.toString) {
+				return self.toString();
 			}
 			else {
-				return null;
+				return obj.prototype.constructor.name.toUpperCase();
 			}
 		};
 
@@ -12500,7 +13055,8 @@
 				var tag = args.shift();
 				var msg = args.shift();
 				var prefix = ['[' + getTag(this) + ' // ' + tag + '] ' + msg];
-				console[loggerType].apply(null, prefix.concat(args));
+				var call = Function.prototype.call;
+				call.apply(call, [console[loggerType], console].concat(prefix, args));
 			};
 		};
 
@@ -12569,137 +13125,6 @@
 		return defn.locks && !!defn.locks[name];
 	}
 
-	// Lock {{{1
-	// Constructor {{{2
-
-	/**
-	 * An implementation of a counting semaphore for JavaScript.
-	 * @class
-	 */
-
-	var Lock = function (name, opts) {
-		var self = this;
-
-		self._opts = opts || {};
-
-		if (self._opts.debug == null) {
-			self._opts.debug = true;
-		}
-
-		self._name = name || '#' + (Lock._id++);
-		self._lockCount = 0;
-		self._onUnlock = [];
-
-		if (!self._opts.debug) {
-			self.debug = NOP;
-		}
-	};
-
-	Lock._id = 1;
-
-	mixinDebugging(Lock, function () {
-		return 'LOCK (' + this._name + ' {level ' + this._lockCount + '})';
-	});
-
-	// #lock {{{2
-
-	/**
-	 * Engage the lock.  A lock can be engaged multiple times.  Each lock operation must be unlocked
-	 * separately to fully disengage the lock.
-	 *
-	 * @method
-	 */
-
-	Lock.prototype.lock = function (why) {
-		var self = this;
-
-		this._lockCount += 1;
-
-		var msg = 'Locking to level: ' + self._lockCount;
-
-		if (why != null) {
-			msg += ' - ' + why;
-		}
-
-		self.debug(msg);
-	};
-
-	// #unlock {{{2
-
-	/**
-	 * Disengage the lock.  A lock can be engaged multiple times.  Each lock operation must be unlocked
-	 * separately to fully disengage the lock.
-	 *
-	 * @method
-	 */
-
-	Lock.prototype.unlock = function () {
-		var self = this;
-
-		self._lockCount -= 1;
-		self.debug('Unlocking to level: ' + self._lockCount);
-
-		// If we're completely unlocked, start going through the functions that were registered to be run.
-		// The only problem is that these functions can cause us to be locked again.  If that happens, we
-		// abort.  The functions to run are a queue, and when we become unlocked we'll just resume running
-		// the functions in the queue.
-
-		var onUnlockLen = self._onUnlock.length;
-		var i = 0;
-
-		while (self._onUnlock.length > 0 && !self.isLocked()) {
-			i += 1;
-			var onUnlock = self._onUnlock.shift();
-			self.debug('Running onUnlock function (%d of %d) - %s', i, onUnlockLen, onUnlock.info || '[NO INFO]');
-			onUnlock.f();
-		}
-	};
-
-	// #isLocked {{{2
-
-	/**
-	 * Check to see if the lock is engaged.
-	 *
-	 * @method
-	 *
-	 * @returns {boolean} True if the lock is engaged, false if it's disengaged.
-	 */
-
-	Lock.prototype.isLocked = function () {
-		var self = this;
-
-		return self._lockCount !== 0;
-	};
-
-	// #onUnlock {{{2
-
-	/**
-	 * Register a function to call when the lock is fully disengaged (i.e. all locks have been
-	 * unlocked).
-	 *
-	 * @method
-	 *
-	 * @param {function} f Function to call when the lock is disengaged.
-	 */
-
-	Lock.prototype.onUnlock = function (f, info) {
-		var self = this;
-
-		// If we're not already locked, there's no point in queueing it up, just do it.  This can simplify
-		// logic in callers (i.e. they don't have to do the check).
-
-		if (!self.isLocked()) {
-			return f();
-		}
-
-		self._onUnlock.push({
-			f: f,
-			info: info
-		});
-
-		self.debug('Saved onUnlock function (#%d) - %s', self._onUnlock.length, info || '[NO INFO]');
-	};
-
 	// HTML {{{1
 
 	/**
@@ -12732,6 +13157,16 @@
 
 	function isVisible(elt) {
 		return elt.css('display') !== 'none' && elt.css('visibility') === 'visible';
+	}
+
+	function isElement(x) {
+		return x instanceof Element || x instanceof jQuery;
+	}
+
+	function getElement(x) {
+		return x instanceof Element ? x
+			: x instanceof jQuery ? x.get(0)
+			: null;
 	}
 
 	/*
@@ -12919,9 +13354,116 @@
 					lock.lock();
 					load(url, makeCb(false));
 				}
-			}, sprintf.sprintf('Waiting to load [url = %s]', url));
+			}, sprintf$1.sprintf('Waiting to load [url = %s]', url));
 		};
 	})();
+
+	/**
+	 * Set the value of a table cell.
+	 *
+	 * @param {jQuery|HTMLTableCellElement} cell
+	 * @param {Element|jQuery|string|number} value
+	 * @param {object} opts
+	 * @param {string} opts.field
+	 * @param {OrdMap} opts.colConfig
+	 * @param {OrdMap} opts.typeInfo
+	 */
+
+	function setTableCell(cell, value, opts) {
+		opts = opts || {};
+
+		var fcc = (opts.colConfig instanceof OrdMap && opts.colConfig.get(opts.field)) || opts.colConfig || {};
+		var fti = (opts.typeInfo instanceof OrdMap && opts.typeInfo.get(opts.field)) || opts.typeInfo || {};
+
+		if (cell instanceof jQuery) {
+			cell = cell.get(0);
+		}
+
+		if (!(cell instanceof HTMLTableCellElement)) {
+			throw new Error('Call Error: `cell` must be a HTMLTableCellElement instance');
+		}
+
+		var container = cell;
+
+		if (fcc.maxHeight != null && value !== '') {
+			var wrapper = document.createElement('div');
+			wrapper.classList.add('wcdv_maxheight_wrapper');
+			wrapper.style.maxHeight = fcc.maxHeight;
+
+			if (fcc.width) {
+				wrapper.classList.add('wcdv_maxheight_wrapper_withwidth');
+				wrapper.style.width = fcc.width;
+			}
+
+			var showValueBtn = document.createElement('button');
+			showValueBtn.setAttribute('title', 'Full value has been truncated; click to show it.');
+			showValueBtn.classList.add('wcdv_icon_button');
+			showValueBtn.classList.add('wcdv_icon_button_incell');
+			showValueBtn.classList.add('wcdv_icon_button_nolabel');
+			showValueBtn.classList.add('wcdv_show_full_value');
+
+			var showValueSpan = document.createElement('span');
+			showValueSpan.classList.add('fa');
+			showValueSpan.classList.add('fa-asterisk');
+
+			container = document.createElement('div');
+
+			// cell (td)
+			//   wrapper (div)
+			//     showValueBtn (button)
+			//       showValueSpan (span.fa)
+			//     container (div)
+
+			cell.appendChild(wrapper);
+			wrapper.appendChild(showValueBtn);
+			showValueBtn.appendChild(showValueSpan);
+			wrapper.appendChild(container);
+		}
+
+		setElement(container, value, opts);
+	}
+
+	/**
+	 * Set the value of an element.
+	 *
+	 * @param {jQuery|Element} container
+	 * @param {Element|jQuery|string|number} value
+	 * @param {object} opts
+	 * @param {string} opts.field
+	 * @param {OrdMap} opts.colConfig
+	 * @param {OrdMap} opts.typeInfo
+	 */
+
+	function setElement(container, value, opts) {
+		opts = opts || {};
+
+		var fcc = (opts.colConfig instanceof OrdMap && opts.colConfig.get(opts.field)) || opts.colConfig || {};
+		var fti = (opts.typeInfo instanceof OrdMap && opts.typeInfo.get(opts.field)) || opts.typeInfo || {};
+
+		if (container instanceof jQuery) {
+			container = container.get(0);
+		}
+
+		if (!(container instanceof Element)) {
+			throw new Error('Call Error: `container` must be an Element instance');
+		}
+
+		if (value instanceof Element) {
+			container.appendChild(value);
+		}
+		else if (value instanceof jQuery) {
+			container.appendChild(value.get(0));
+		}
+		else if (fcc.allowHtml && fti.type === 'string') {
+			container.innerHTML = value;
+		}
+		else if (value === '') {
+			container.innerText = '\u00A0';
+		}
+		else {
+			container.innerText = value;
+		}
+	}
 
 	// makeCheckbox {{{2
 
@@ -13023,6 +13565,7 @@
 				.appendTo(root);
 		});
 		root.find('input[type=radio]').val([initial]);
+		return root;
 	}
 
 	// Input / Output {{{1
@@ -13085,7 +13628,7 @@
 
 	var debug = {
 		info: function (tag) {
-			if (!MIE.DEBUGGING) {
+			if (!(window.MIE && window.MIE.DEBUGGING)) {
 				return;
 			}
 
@@ -13095,7 +13638,7 @@
 			return log.info.apply(window.console, args);
 		},
 		warn: function (tag) {
-			if (!MIE.DEBUGGING) {
+			if (!(window.MIE && window.MIE.DEBUGGING)) {
 				return;
 			}
 
@@ -13105,7 +13648,7 @@
 			return log.warn.apply(window.console, args);
 		},
 		error: function (tag) {
-			if (!MIE.DEBUGGING) {
+			if (!(window.MIE && window.MIE.DEBUGGING)) {
 				return;
 			}
 
@@ -13148,8 +13691,9 @@
 	}
 
 	function convert(cell, fti) {
+		var value = cell.value;
 		var error = function (msg) {
-			log.error('Unable to convert cell value, %s: field = "%s", fti.type = %s, fti.internalType = %s, value = %O (%s)', msg, fti.field || '[unknown]', fti.type, fti.internalType, cell.value, typeof cell.value);
+			log.error('Unable to convert cell value, %s: field = "%s", fti.type = %s, fti.internalType = %s, value = %O (%s)', msg, fti.field || '[unknown]', fti.type, fti.internalType, value, typeof value);
 		};
 
 		if (cell.decoded) {
@@ -13188,24 +13732,27 @@
 					switch (fti.internalType) {
 					case 'primitive':
 						// string -> primitive
-						var newVal = parseNumber(cell.value);
-						if (newVal != null) {
-							cell.value = newVal;
-						}
-						else {
+						cell.value = parseNumber(cell.value);
+						if (cell.value == null) {
 							return error('cannot decode primitive number');
 						}
 						break;
 					case 'numeral':
 						// string -> numeral
-						cell.value = numeral(cell.value);
+						var newVal = parseNumber(cell.value);
+						if (newVal == null) {
+							cell.value = null;
+							return error('cannot decode primitive number');
+						}
+						cell.value = numeral(newVal);
 						break;
 					case 'bignumber':
-						cell.value = new bignumber(parseNumber(cell.value, 'string'));
-						if (cell.value.isNaN()) {
+						var newVal = parseNumber(cell.value, 'string');
+						if (newVal == null) {
 							cell.value = null;
 							return error('invalid value');
 						}
+						cell.value = new bignumber(newVal);
 						break;
 					default:
 						return error('unsupported internal representation');
@@ -13293,11 +13840,19 @@
 	 * This is often used when outputting aggregate function results that have a different type from the
 	 * type of the field they're applied on (e.g. "distinct values" always produces a string, even if
 	 * it's applied over a field that contains dates or currency).
+	 *
+	 * @param {boolean} [saferCaching=true]
+	 * If true, only cache non-Element results from calling the `render` function on a cell.  In the
+	 * event that the cell is displayed more than once (e.g. group summary or pivot output, where the
+	 * single cell representing a rowval element is shown in each rowval having it as a member), if we
+	 * cache the Element, it will be reused, and thus moved around on the page, causing all but one
+	 * instance of the cell to disappear.
 	 */
 
 	function format(fcc, fti, cell, opts) {
 		var newVal
-			, isNegative = false;
+			, isNegative = false
+			, isSafeToCache = true;
 
 		fcc = fcc || {};
 		fti = fti || {};
@@ -13306,7 +13861,8 @@
 		underscore.defaults(opts, {
 			debug: false,
 			overrideType: null,
-			convert: true
+			convert: true,
+			saferCaching: true
 		});
 
 		if (opts.debug) {
@@ -13414,6 +13970,44 @@
 			}
 
 			return result;
+		};
+
+		var formatPrimitiveNumber = function (x, fmt, method) {
+			var language;
+
+			switch (method) {
+			case 'intl':
+				if (window.Intl != null && window.Intl.NumberFormat != null) {
+					if (window.navigator.languages) {
+						language = window.navigator.languages[0];
+					}
+					else {
+						language = window.navigator.userLanguage || window.navigator.language;
+					}
+
+					var config = {
+						useGrouping: fmt.integerPart.grouping
+					};
+
+					if (fmt.decimalPlaces != null) {
+						config.minimumFractionDigits = fmt.decimalPlaces;
+						config.maximumFractionDigits = fmt.decimalPlaces;
+					}
+
+					var intlNumFmt = new Intl.NumberFormat(language, config);
+					console.log(intlNumFmt.resolvedOptions());
+					return intlNumFmt.format(x);
+				}
+				else {
+					return '' + x;
+				}
+			case 'bignumber':
+				return new bignumber(x).toFormat(fmt.decimalPlaces, bigNumberRoundingMode(fmt), bigNumberFormat(fmt));
+			case 'numeral':
+				return numeral(x).format(numeralFormat(fmt));
+			default:
+				return '' + x;
+			}
 		};
 
 		// When we just receive a value instead of a proper data cell, convert it so that code below can
@@ -13527,6 +14121,10 @@
 				}
 
 				if (moment.isMoment(cell.value)) {
+					if (!cell.value.isValid()) {
+						break;
+					}
+
 					if (t === 'datetime' && fcc.hideMidnight && cell.value.hour() === 0 && cell.value.minute() === 0 && cell.value.second() === 0) {
 						result = cell.value.format(format_dateOnly);
 					}
@@ -13538,6 +14136,11 @@
 					// FIXME: Make this work without Moment.
 
 					var m = moment(cell.value);
+
+					if (!m.isValid()) {
+						break;
+					}
+
 					if (t === 'datetime' && fcc.hideMidnight && m.hour() === 0 && m.minute() === 0 && m.second() === 0) {
 						result = m.format(format_dateOnly);
 					}
@@ -13552,7 +14155,18 @@
 					convert(cell, fti);
 				}
 
+				if (cell.value == null
+						|| (fti.internalType === 'primitive' && Number.isNaN(cell.value))
+						|| (fti.internalType === 'numeral' && (Number.isNaN(cell.value) || cell.value.value() === null))
+						|| (fti.internalType === 'bignumber' && cell.value.isNaN())) {
+					break;
+				}
+
 				if (bignumber.isBigNumber(cell.value)) {
+					if (cell.value.isNaN()) {
+						break;
+					}
+
 					if (cell.value.isNegative()) {
 						isNegative = true;
 						newVal = cell.value.abs();
@@ -13564,6 +14178,10 @@
 					result = newVal.toFormat(format.decimalPlaces, bigNumberRoundingMode(format), bigNumberFormat(format));
 				}
 				else if (numeral.isNumeral(cell.value)) {
+					if (cell.value.value() === null) {
+						break;
+					}
+
 					if (cell.value.value() < 0) {
 						isNegative = true;
 						newVal = cell.value.multiply(-1);
@@ -13575,6 +14193,10 @@
 					result = cell.value.format(numeralFormat(format));
 				}
 				else {
+					if (Number.isNaN(cell.value)) {
+						break;
+					}
+
 					if (cell.value < 0) {
 						isNegative = true;
 						newVal = cell.value * -1;
@@ -13583,7 +14205,7 @@
 						newVal = cell.value;
 					}
 
-					result = numeral(newVal).format(numeralFormat(format));
+					result = formatPrimitiveNumber(newVal, format, 'bignumber');
 				}
 
 				if (isNegative) {
@@ -13611,15 +14233,23 @@
 		}
 
 		// If there's a rendering function, pass the (possibly formatted) value through it to get the new
-		// value to display.
+		// value to display.  If the rendering function returns an Element (possibly built via jQuery),
+		// mark the result as unsafe to cache, because an Element can't be on the page more than once, so
+		// we need to have the rendering function make it every time, in the event that the same cell is
+		// displayed more than once in the grid.
 
 		if (typeof cell.render === 'function') {
 			result = cell.render(result);
+			if (opts.saferCaching && (result instanceof jQuery || result instanceof Element)) {
+				isSafeToCache = false;
+			}
 		}
 
-		cell.cachedRender = result;
+		if (isSafeToCache) {
+			cell.cachedRender = result;
+		}
 
-		return cell.cachedRender;
+		return result;
 	}
 
 	// Date and Time Formatting {{{1
@@ -14027,7 +14657,13 @@
 	// }}}1
 
 	function delegate(from, to, methods) {
-		underscore.each(methods, function (m) {
+		if (!underscore.isArray(methods)) {
+			methods = [methods];
+		}
+		underscore.each(methods, function (m, i) {
+			if (typeof m !== 'string') {
+				throw new Error('Call Error: `methods[' + i + ']` must be a string');
+			}
 			from.prototype[m] = function () {
 				var args = Array.prototype.slice.call(arguments);
 				return this[to][m].apply(this[to], args);
@@ -14122,10 +14758,31 @@
 
 		validateColConfig(colConfig, data);
 
-		if (colConfig.size() > 0) {
-			columns = colConfig.filter(function (cc) {
+		// FIXME: Checking _keys.length is a stand-in for saying "this OrdMap has never had anything added
+		// to it" and should be implemented in a way that doesn't use knowledge of OrdMap's internals.
+		//
+		// The reason for not just checking size is this test:
+		//
+		//   - defn: columns = ['A', 'B']
+		//   - source: columns = ['X', 'Y', 'Z']
+		//
+		// The defn colConfig is stripped of fields not in the source, making it [].  Here, an empty
+		// colConfig means to show all source fields.  But that defies the purpose of defn colConfig,
+		// which is to limit what is visible: the correct behavior is to show nothing.  The fix is to
+		// check instead that the OrdMap has never been changed, meaning it wasn't set by defn, and
+		// therefore it's OK to show all fields.
+
+		if (colConfig._keys.length > 0) {
+			var notHidden = colConfig.filter(function (cc) {
 				return !cc.isHidden;
+			});
+			var pinned = notHidden.filter(function (cc) {
+				return cc.isPinned;
 			}).keys();
+			var notPinned = notHidden.filter(function (cc) {
+				return !cc.isPinned;
+			}).keys();
+			columns = pinned.concat(notPinned);
 		}
 		else if (typeInfo.size() > 0) {
 			columns = underscore.reject(typeInfo.keys(), function (field) {
@@ -14230,6 +14887,11 @@
 		});
 	}
 
+	// sleep {{{2
+
+	function sleep(ms) {
+	}
+
 	// EagerPipeline {{{1
 
 	var EagerPipeline = makeSubclass('EagerPipeline', Object, function (x) {
@@ -14256,6 +14918,66 @@
 		return this.x;
 	};
 
+	// Polyfills {{{1
+
+	// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/repeat
+
+	if (!String.prototype.repeat) {
+	  String.prototype.repeat = function(count) {
+	    if (this == null) { // check if `this` is null or undefined
+	      throw new TypeError('can\'t convert ' + this + ' to object');
+	    }
+	    var str = '' + this;
+	    // To convert string to integer.
+	    count = +count;
+	    if (count < 0) {
+	      throw new RangeError('repeat count must be non-negative');
+	    }
+	    if (count == Infinity) {
+	      throw new RangeError('repeat count must be less than infinity');
+	    }
+	    count |= 0; // floors and rounds-down it.
+	    if (str.length == 0 || count == 0) {
+	      return '';
+	    }
+	    // Ensuring count is a 31-bit integer allows us to heavily optimize the
+	    // main part. But anyway, most current (August 2014) browsers can't handle
+	    // strings 1 << 28 chars or longer, so:
+	    if (str.length * count >= (1 << 28)) {
+	      throw new RangeError('repeat count must not overflow maximum string size');
+	    }
+	    while (count >>= 1) { // shift it by multiple of 2 because this is binary summation of series
+	       str += str; // binary summation
+	    }
+	    str += str.substring(0, str.length * count - str.length);
+	    return str;
+	  };
+	}
+
+	// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/isNaN
+
+	Number.isNaN = Number.isNaN || function(value) {
+		return value !== value;
+	};
+
+	// https://developer.mozilla.org/en-US/docs/Web/API/Element/closest
+
+	if (!Element.prototype.matches) {
+	  Element.prototype.matches = Element.prototype.msMatchesSelector || Element.prototype.webkitMatchesSelector;
+	}
+
+	if (!Element.prototype.closest) {
+	  Element.prototype.closest = function(s) {
+	    var el = this;
+
+	    do {
+	      if (el.matches(s)) return el;
+	      el = el.parentElement || el.parentNode;
+	    } while (el !== null && el.nodeType === 1);
+	    return null;
+	  };
+	}
+
 	var Util = /*#__PURE__*/Object.freeze({
 		gensym: gensym,
 		Y: Y,
@@ -14268,6 +14990,7 @@
 		makeChain: makeChain,
 		makeArray: makeArray,
 		trulyYours: trulyYours,
+		asyncChain: asyncChain,
 		curry: curry,
 		curryCtor: curryCtor,
 		either: either,
@@ -14298,6 +15021,7 @@
 		getPropDef: getPropDef,
 		setProp: setProp,
 		setPropDef: setPropDef,
+		copyProps: copyProps,
 		needProp: needProp,
 		needPropIn: needPropIn,
 		needPropArr: needPropArr,
@@ -14325,14 +15049,17 @@
 		lock: lock,
 		unlock: unlock,
 		isLocked: isLocked,
-		Lock: Lock,
 		outerHtml: outerHtml,
 		getText: getText,
 		isVisible: isVisible,
+		isElement: isElement,
+		getElement: getElement,
 		isElementInViewport: isElementInViewport,
 		onVisibilityChange: onVisibilityChange,
 		fontAwesome: fontAwesome,
 		loadScript: loadScript,
+		setTableCell: setTableCell,
+		setElement: setElement,
 		makeCheckbox: makeCheckbox,
 		makeToggleCheckbox: makeToggleCheckbox,
 		makeRadioButtons: makeRadioButtons,
@@ -14367,6 +15094,7 @@
 		presentDownload: presentDownload,
 		dataURItoBlob: dataURItoBlob,
 		uuid: uuid,
+		sleep: sleep,
 		EagerPipeline: EagerPipeline
 	});
 
@@ -14443,7 +15171,9 @@
 	}, {
 		enabled: true,
 		fieldCount: 0,
-		inheritFormatting: false
+		fieldInfo: [],
+		inheritFormatting: false,
+		numItems: 0
 	});
 
 	// JSDoc {{{2
@@ -14502,6 +15232,8 @@
 		if (!self.checkOpts() || !self.checkData(data)) {
 			return self.bottomValue;
 		}
+
+		self.numItems = 0;
 
 		len = data.length;
 
@@ -14634,9 +15366,9 @@
 		}
 	};
 
-	// #getRealValueAsString {{{2
+	// #getFormattedValue {{{2
 
-	Aggregate.prototype.getRealValueAsString = function (cell) {
+	Aggregate.prototype.getFormattedValue = function (cell) {
 		var self = this;
 		var val = self.getRealValue(cell);
 		var colConfig = self.opts.colConfig ? self.opts.colConfig[0] : null;
@@ -14801,8 +15533,9 @@
 
 	CountDistinctAggregate.prototype.calculateStep = function (acc, next) {
 		var self = this;
+		var cell = next[self.opts.fields[0]];
+		var key = getNatRep(cell.value);
 
-		var key = self.getRealValueAsString(next[self.opts.fields[0]]);
 		if (acc.set[key] == null) {
 			acc.set[key] = true;
 			acc.count += 1;
@@ -14812,8 +15545,8 @@
 
 	// #calculateDone {{{2
 
-	CountDistinctAggregate.prototype.calculateDone = function (obj) {
-		return obj.count;
+	CountDistinctAggregate.prototype.calculateDone = function (acc) {
+		return acc.count;
 	};
 
 	// Values {{{1
@@ -14824,7 +15557,10 @@
 		inheritFormatting: false,
 		type: 'string',
 		init: function () {
-			return [];
+			return {
+				resultIsElement: false,
+				values: []
+			};
 		},
 		options: {
 			'separator': {
@@ -14837,8 +15573,13 @@
 
 	ValuesAggregate.prototype.calculateStep = function (acc, next) {
 		var self = this;
+		var formatted = self.getFormattedValue(next[self.opts.fields[0]]);
 
-		acc.push(self.getRealValueAsString(next[self.opts.fields[0]]));
+		if (isElement(formatted)) {
+			acc.resultIsElement = true;
+		}
+
+		acc.values.push(formatted);
 		return acc;
 	};
 
@@ -14847,7 +15588,22 @@
 	ValuesAggregate.prototype.calculateDone = function (acc) {
 		var self = this;
 
-		return acc.join(self.opts.separator || ', ');
+		if (!acc.resultIsElement) {
+			return acc.values.join(self.opts.separator || ', ');
+		}
+		else {
+			var wrapper = jQuery('<div>');
+			underscore.each(acc.values, function (elt, i) {
+				if (i > 0) {
+					wrapper.append(self.opts.separator || ', ');
+				}
+				// FIXME: Subsequent calls to #calculate() from a different instance of ValuesAggregate can
+				// change the elements of acc and therefore wrapper.  I cannot figure out why, so cloning the
+				// element will have to do for now.
+				wrapper.append(isElement(elt) ? elt.clone() : elt);
+			});
+			return wrapper;
+		}
 	};
 
 	// Values w/ Counts {{{1
@@ -14858,7 +15614,10 @@
 		inheritFormatting: false,
 		type: 'string',
 		init: function () {
-			return new OrdMap();
+			return {
+				map: new OrdMap(),
+				resultIsElement: false
+			}
 		},
 		options: {
 			'separator': {
@@ -14871,13 +15630,22 @@
 
 	ValuesWithCountsAggregate.prototype.calculateStep = function (acc, next) {
 		var self = this;
-		var key = self.getRealValueAsString(next[self.opts.fields[0]]);
+		var cell = next[self.opts.fields[0]];
+		var key = getNatRep(cell.value);
+		var formatted = self.getFormattedValue(cell);
 
-		if (acc.isSet(key)) {
-			acc.set(key, acc.get(key) + 1);
+		if (acc.map.isSet(key)) {
+			var info = acc.map.get(key);
+			info.count += 1;
 		}
 		else {
-			acc.set(key, 1);
+			acc.map.set(key, {
+				formatted: formatted,
+				count: 1
+			});
+			if (isElement(formatted)) {
+				acc.resultIsElement = true;
+			}
 		}
 
 		return acc;
@@ -14887,56 +15655,59 @@
 
 	ValuesWithCountsAggregate.prototype.calculateDone = function (acc) {
 		var self = this;
-		var a = [];
 
-		acc.each(function (v, k) {
-			a.push(k + ' (' + v + ')');
-		});
+		if (acc.resultIsElement) {
+			var div = jQuery('<div>');
+			acc.map.each(function (v, k, i) {
+				if (i > 0) {
+					div.append(self.opts.separator || ', ');
+				}
+				div.append(isElement(v.formatted) ? v.formatted.clone() : v.formatted);
+				div.append(' (' + v.count + ')');
+			});
+			return div;
+		}
+		else {
+			var a = [];
 
-		return a.join(self.opts.separator || ', ');
+			acc.map.each(function (v, k) {
+				a.push(k + ' (' + v.count + ')');
+			});
+
+			return a.join(self.opts.separator || ', ');
+		}
 	};
 
 	// Distinct Values {{{1
 
-	var DistinctValuesAggregate = makeSubclass('DistinctValuesAggregate', Aggregate, null, {
-		name: 'Distinct Values',
-		fieldCount: 1,
-		inheritFormatting: false,
-		type: 'string',
-		init: function () {
-			return {
-				a: [],
-				m: {}
-			}
-		},
-		options: {
-			'separator': {
-				'displayText': 'Separator'
-			}
-		}
+	var DistinctValuesAggregate = makeSubclass('DistinctValuesAggregate', ValuesWithCountsAggregate, null, {
+		name: 'Distinct Values'
 	});
-
-	// #calculateStep {{{2
-
-	DistinctValuesAggregate.prototype.calculateStep = function (acc, next) {
-		var self = this;
-
-		var key = self.getRealValueAsString(next[self.opts.fields[0]]);
-
-		if (!acc.m[key]) {
-			acc.m[key] = true;
-			acc.a.push(format(self.opts.colConfig[0], self.opts.typeInfo[0], self.getRealValue(next[self.opts.fields[0]])));
-		}
-
-		return acc;
-	};
 
 	// #calculateDone {{{2
 
 	DistinctValuesAggregate.prototype.calculateDone = function (acc) {
 		var self = this;
 
-		return acc.a.join(self.opts.separator || ', ');
+		if (acc.resultIsElement) {
+			var div = jQuery('<div>');
+			acc.map.each(function (v, k, i) {
+				if (i > 0) {
+					div.append(self.opts.separator || ', ');
+				}
+				div.append(isElement(v.formatted) ? v.formatted.clone() : v.formatted);
+			});
+			return div;
+		}
+		else {
+			var a = [];
+
+			acc.map.each(function (v, k) {
+				a.push(k);
+			});
+
+			return a.join(self.opts.separator || ', ');
+		}
 	};
 
 	// Sum {{{1
@@ -14967,17 +15738,34 @@
 		var val = self.getRealValue(next[self.opts.fields[0]]);
 
 		if (val == null) {
-			// TODO Warn about invalid value.
-			val = self.opts.typeInfo[0].internalType === 'numeral' ? numeral(0) : 0;
+			return acc;
 		}
 
 		switch (self.opts.typeInfo[0].internalType) {
 		case 'primitive':
-			return acc + val;
+			if (Number.isNaN(val)) {
+				return acc;
+			}
+			else {
+				self.numItems += 1;
+				return acc + val;
+			}
 		case 'numeral':
-			return acc.add(val.value());
+			if (Number.isNaN(val) || val.value() === null) {
+				return acc;
+			}
+			else {
+				self.numItems += 1;
+				return acc.add(val.value());
+			}
 		case 'bignumber':
-			return acc.plus(val);
+			if (val.isNaN()) {
+				return acc;
+			}
+			else {
+				self.numItems += 1;
+				return acc.plus(val);
+			}
 		}
 	};
 
@@ -15006,8 +15794,43 @@
 			return self.bottomValue;
 		}
 
+		// First, compute the SUM using a sum aggregate.  It will keep track of the number of contributing
+		// items internally which we can use for division later.
 
-		return self.sumAgg.calculate(data) / data.length;
+		var num = self.sumAgg.calculate(data);
+		var denom = self.sumAgg.numItems;
+
+		// If the SUM ends up being null, NaN, or invalid in any other way, just return the bottom value.
+		// Otherwise, perform the average using whatever division method is appropriate for the internal
+		// type of the field.
+
+		if (num == null || denom === 0) {
+			return self.bottomVal;
+		}
+
+		switch (self.opts.typeInfo[0].internalType) {
+		case 'primitive':
+			if (Number.isNaN(num)) {
+				return self.bottomVal;
+			}
+			else {
+				return num / denom;
+			}
+		case 'numeral':
+			if (Number.isNaN(num) || num.value() === null) {
+				return self.bottomVal;
+			}
+			else {
+				return num.divide(denom);
+			}
+		case 'bignumber':
+			if (num.isNaN()) {
+				return self.bottomVal;
+			}
+			else {
+				return num.div(denom);
+			}
+		}
 	};
 
 	// Min {{{1
@@ -15216,6 +16039,11 @@
 	var SumOverSumAggregate = makeSubclass('SumOverSumAggregate', Aggregate, null, {
 		name: 'Sum/Sum',
 		fieldCount: 2,
+		fieldInfo: [{
+			name: 'Num'
+		}, {
+			name: 'Denom'
+		}],
 		type: 'string',
 		inheritFormatting: false,
 		bottomValue: 0,
@@ -15246,19 +16074,19 @@
 
 		if (window.sprintf) {
 			if (self.opts.format) {
-				return sprintf.sprintf(self.opts.format, result);
+				return sprintf$1.sprintf(self.opts.format, result);
 			}
 			if (result >= 100) {
-				return sprintf.sprintf('%d', result);
+				return sprintf$1.sprintf('%d', result);
 			}
 			else if (result >= 10) {
-				return sprintf.sprintf('%3.1f', result);
+				return sprintf$1.sprintf('%3.1f', result);
 			}
 			else if (result >= 1) {
-				return sprintf.sprintf('%3.2f', result);
+				return sprintf$1.sprintf('%3.2f', result);
 			}
 			else {
-				return sprintf.sprintf('%3.3f', result);
+				return sprintf$1.sprintf('%3.3f', result);
 			}
 		}
 		return result;
@@ -15277,6 +16105,11 @@
 	var CountOverCountAggregate = makeSubclass('CountOverCountAggregate', Aggregate, null, {
 		name: 'Count/Count',
 		fieldCount: 2,
+		fieldInfo: [{
+			name: 'Num'
+		}, {
+			name: 'Denom'
+		}],
 		type: 'number',
 		inheritFormatting: false,
 		bottomValue: 0
@@ -15362,6 +16195,7 @@
 		var self = this;
 
 		self.aggNum = aggNum;
+		self.aggType = aggType;
 		self.fun = spec.fun;
 		self.name = spec.name;
 		self.isHidden = spec.isHidden;
@@ -15475,24 +16309,81 @@
 		self.instance = new aggClass(ctorOpts);
 	});
 
+	/**
+	 * @file
+	 * Implements parameters and filters that can be sent to the origin by a {@link Source}.
+	 *
+	 * ## Classes
+	 *
+	 * - {@link Filter}
+	 * - {@link FilterSet}
+	 * - {@link FilterInput}
+	 * - {@link ParamInput}
+	 */
+
+	// JSDoc {{{1
+
+	/**
+	 * @typedef {object} Filter~Config
+	 *
+	 * @property {string} inputName Name of an input element from a form.
+	 *
+	 * @property {string} type What kind of widget to get input from.  If this is undefined, the default
+	 * value will be used for storing (from the page), and loading (into the page) will do nothing.
+	 *
+	 * @property {boolean} required If true, an error will be issued if this filter is used on a data
+	 * source, when the user has not entered anything into the input element.
+	 *
+	 * @property {string} method How the input should be sent to the server.  Allowed values: [cgi,
+	 * json_where, json_having].
+	 *
+	 * @property {string} paramName When method = "cgi", the name of the CGI parameter to send.
+	 *
+	 * @property {any} value The value that will be sent to the server.
+	 *
+	 * @property {any} internalValue An internal representation of the value sent (e.g. an object
+	 * storing extra information).
+	 *
+	 * @property {any} defaultValue A default value to send when the user has not specified anything.
+	 *
+	 * @property {object} json When method = "json_where" or method = "json_having", specifies details
+	 * about that method.
+	 *
+	 * @property {string} json.name Name of the constraint set.
+	 *
+	 * @property {string} json.column Name of the column to add a constraint for.
+	 *
+	 * @property {string} json.operator Operator to use for the constraint.  Allowed values: [$eq, $ne,
+	 * $in, $nin, $gt, $gte, $lt, $lte, $like].
+	 *
+	 * @property {string} json.operand When absent, the user's input is sent as the value.  When
+	 * present, this is sent instead, and any empty array is replaced with the user's input.
+	 */
+
 	// FilterError {{{1
 
 	/**
 	 * @class
 	 */
 
-	var FilterError = function (msg) {
+	var FilterError = makeSubclass('FilterError', Error, function (msg) {
 		this.message = msg;
-	};
-
-	FilterError.prototype = Object.create(Error.prototype);
-	FilterError.prototype.name = 'FilterError';
-	FilterError.prototype.constructor = FilterError;
+	});
 
 	// Filter {{{1
 
+	// Constructor {{{2
+
 	/**
+	 * Create a new Filter.
+	 *
+	 * @param {Filter~Config} config
+	 * Specify the properties of this Filter.
+	 *
 	 * @class
+	 *
+	 * Represents a value that can be sent to an origin by a {@link Source}.  Usually (but not always)
+	 * associated with some input element in the page where the user provides the value.
 	 *
 	 * @property {string} inputName Name of an input element from a form.
 	 *
@@ -15527,8 +16418,6 @@
 	 *
 	 * @property {any} defaultValue A default value to send when the user has not specified anything.
 	 */
-
-	// Constructor {{{2
 
 	var Filter = function (config) {
 		var self = this
@@ -15573,13 +16462,18 @@
 		var self = this;
 
 		if (self.type === undefined) {
-			self.value = self.defaultValue;
+			self.value = typeof self.defaultValue === 'function'
+				? self.defaultValue()
+				: self.defaultValue;
 		}
 		else {
 			switch (self.type) {
 			case 'hidden':
 			case 'text':
 				self.value = findInput('input[name="' + self.inputName + '"]').val();
+				break;
+			case 'textarea':
+				self.value = findInput('textarea[name="' + self.inputName + '"]').val();
 				break;
 			case 'date':
 				self.internalValue = {};
@@ -15614,6 +16508,41 @@
 					self.internalValue[i] = jQuery(elt).parent().text();
 				});
 				break;
+			case 'form':
+				var obj = {};
+				findInput('input').each(function (i, elt) {
+					var j = jQuery(elt)
+						, name = j.attr('name')
+						, type = j.attr('type');
+					if (name == null) {
+						return;
+					}
+					switch (type) {
+					case 'hidden':
+					case 'text':
+						obj[name] = j.val();
+						break;
+					case 'checkbox':
+					case 'radio':
+						if (j.prop('checked')) {
+							if (obj[j.attr('name')] == null) {
+								obj[name] = [];
+							}
+							obj[name].push(j.val());
+						}
+						break;
+					}
+				});
+				findInput('select,textarea').each(function (i, elt) {
+					var j = jQuery(elt)
+						, name = j.attr('name');
+					if (name == null) {
+						return;
+					}
+					obj[name] = j.val();
+				});
+				self.value = obj;
+				break;
 			default:
 				throw 'Invalid parameter specification: unknown input type "' + self.type + '"';
 			}
@@ -15629,26 +16558,27 @@
 	// #load {{{2
 
 	/**
-	 * Loads a filter from memory into a form in the page. Any existing content in
-	 * the form is cleared first. This is a lot more complicated than it sounds,
-	 * because every type has to be loaded differently.
+	 * Loads a filter from memory into a form in the page. Any existing content in the form is cleared
+	 * first. This is a lot more complicated than it sounds, because every type has to be loaded
+	 * differently.
 	 *
-	 * @param id The ID of the form to populate.
+	 * @param {string} [id]
+	 * The ID of the form to populate.  If missing, look for inputs on the whole page.
 	 *
-	 * @param opts Additional configuration options:
+	 * @param {object} [opts] Additional configuration options:
 	 *
-	 * - animate: If true, use an animation to pulse the background color of the
-	 *   input that's being changed from its currently value. When this is true,
-	 *   the values bgAccentIn and bgAccountOut must also be provided. (The
-	 *   default is false, do not show animation.)
+	 * @param {boolean} [opts.animate=false]
+	 * If true, use an animation to pulse the background color of the input that's being changed from
+	 * its currently value. When this is true, the values `bgAccentIn` and `bgAccountOut` must also be
+	 * provided.
 	 *
-	 * - bgAccentIn: Hex string for the color to use for fading into the animation
-	 *   (e.g. if you want something to highlight in yellow briefly and then go
-	 *   back to white, use a yellow color here).
+	 * @param {string} [opts.bgAccentIn]
+	 * Hex string for the color to use for fading into the animation (e.g. if you want something to
+	 * highlight in yellow briefly and then go back to white, use a yellow color here).
 	 *
-	 * - bgAccentOut: Hex string for the color to use for fading out of the
-	 *   animation (in the example above, you'd use white). Also supports the
-	 *   special value "transparent" to remove the highlight.
+	 * @param {string} [opts.bgAccentOut]
+	 * Hex string for the color to use for fading out of the animation (in the example above, you'd use
+	 * white). Also supports the special value "transparent" to remove the highlight.
 	 */
 
 	Filter.prototype.load = function (id, opts) {
@@ -15792,11 +16722,11 @@
 	// #buildInput {{{2
 
 	/**
-	 * Constructs a hidden input within the specified form which can be used to
-	 * submit the filter's value to the server.
+	 * Constructs a hidden input within the specified form which can be used to submit the filter's
+	 * value to the server.
 	 *
-	 * @param form DOM node (optionally wrapped by jQuery) of the form element in
-	 * which to place the input.
+	 * @param {Element|jQuery} form
+	 * DOM node (optionally wrapped by jQuery) of the form element in which to place the input.
 	 */
 
 	Filter.prototype.buildInput = function (form) {
@@ -15812,6 +16742,13 @@
 	};
 
 	// #addJsonParam {{{2
+
+	/**
+	 * Add the value of this Filter to the specified JSON object.
+	 *
+	 * @param {object} obj
+	 * The object to which this Filter will add itself.
+	 */
 
 	Filter.prototype.addJsonParam = function (obj) {
 		var self = this
@@ -15900,7 +16837,14 @@
 			self.addJsonParam(params.report_json_having);
 			break;
 		case 'cgi':
-			params[self.paramName] = self.value;
+			if (self.type === 'form') {
+				underscore.each(self.value, function (v, k) {
+					params[k] = v;
+				});
+			}
+			else {
+				params[self.paramName] = self.value;
+			}
 			break;
 		default:
 			throw 'INVALID METHOD';
@@ -15909,13 +16853,9 @@
 
 	// ParamInputError {{{1
 
-	function ParamInputError(msg) {
+	var ParamInputError = makeSubclass('ParamInputError', Error, function (msg) {
 		this.message = msg;
-	}
-
-	ParamInputError.prototype = Object.create(Error.prototype);
-	ParamInputError.prototype.name = 'ParamInputError';
-	ParamInputError.prototype.constructor = ParamInputError;
+	});
 
 	// ParamInput {{{1
 
@@ -16034,24 +16974,12 @@
 		self.filter = new Filter(filterOpts);
 	};
 
-	// #toParams {{{2
-
-	/**
-	 * Place this parameter's value(s) into an object to be sent to the data source.
-	 *
-	 * @param {object} obj The object to place our values into.
-	 */
-
-	ParamInput.prototype.toParams = function (obj) {
-		var self = this;
-
-		return self.filter.toParams(obj);
-	};
+	delegate(ParamInput, 'filter', ['toParams']);
 
 	var papaparse = createCommonjsModule(function (module, exports) {
 	/* @license
 	Papa Parse
-	v4.6.2
+	v4.6.3
 	https://github.com/mholt/PapaParse
 	License: MIT
 	*/
@@ -16335,7 +17263,7 @@
 
 			unpackConfig();
 
-			var quoteCharRegex = new RegExp(_quoteChar, 'g');
+			var quoteCharRegex = new RegExp(escapeRegExp(_quoteChar), 'g');
 
 			if (typeof _input === 'string')
 				_input = JSON.parse(_input);
@@ -16854,9 +17782,9 @@
 				this._input.resume();
 			};
 
-			this.stream = function(stream$$1)
+			this.stream = function(stream)
 			{
-				this._input = stream$$1;
+				this._input = stream;
 
 				this._input.on('data', this._streamData);
 				this._input.on('end', this._streamEnd);
@@ -16932,13 +17860,13 @@
 			var parseOnWrite = true;
 			var writeStreamHasFinished = false;
 			var parseCallbackQueue = [];
-			var stream$$1 = null;
+			var stream$1 = null;
 
 			this._onCsvData = function(results)
 			{
 				var data = results.data;
 				for (var i = 0; i < data.length; i++) {
-					if (!stream$$1.push(data[i]) && !this._handle.paused()) {
+					if (!stream$1.push(data[i]) && !this._handle.paused()) {
 						// the writeable consumer buffer has filled up
 						// so we need to pause until more items
 						// can be processed
@@ -16951,7 +17879,7 @@
 			{
 				// node will finish the read stream when
 				// null is pushed
-				stream$$1.push(null);
+				stream$1.push(null);
 			};
 
 			config.step = bindFunction(this._onCsvData, this);
@@ -17013,15 +17941,15 @@
 
 			this.getStream = function()
 			{
-				return stream$$1;
+				return stream$1;
 			};
-			stream$$1 = new Duplex({
+			stream$1 = new Duplex({
 				readableObjectMode: true,
 				decodeStrings: false,
 				read: bindFunction(this._onRead, this),
 				write: bindFunction(this._onWrite, this)
 			});
-			stream$$1.once('finish', bindFunction(this._onWriteComplete, this));
+			stream$1.once('finish', bindFunction(this._onWriteComplete, this));
 		}
 		if (typeof PAPA_BROWSER_CONTEXT === 'undefined') {
 			DuplexStreamStreamer.prototype = Object.create(ChunkStreamer.prototype);
@@ -17305,7 +18233,7 @@
 
 						if (typeof fieldCountPrevRow === 'undefined')
 						{
-							fieldCountPrevRow = fieldCount;
+							fieldCountPrevRow = 0;
 							continue;
 						}
 						else if (fieldCount > 1)
@@ -17318,7 +18246,7 @@
 					if (preview.data.length > 0)
 						avgFieldCount /= (preview.data.length - emptyLinesCount);
 
-					if ((typeof bestDelta === 'undefined' || delta < bestDelta)
+					if ((typeof bestDelta === 'undefined' || delta > bestDelta)
 						&& avgFieldCount > 1.99)
 					{
 						bestDelta = delta;
@@ -17477,7 +18405,7 @@
 
 				var nextDelim = input.indexOf(delim, cursor);
 				var nextNewline = input.indexOf(newline, cursor);
-				var quoteCharRegex = new RegExp(escapeChar.replace(/[-[\]/{}()*+?.\\^$|]/g, '\\$&') + quoteChar, 'g');
+				var quoteCharRegex = new RegExp(escapeRegExp(escapeChar) + escapeRegExp(quoteChar), 'g');
 				var quoteSearch;
 
 				// Parser loop
@@ -17865,20 +18793,18 @@
 	}));
 	});
 
+	// Imports {{{1
+
 	// SourceError {{{1
 
-	var SourceError = function (msg) {
+	var SourceError = makeSubclass('SourceError', Error, function (msg) {
 		this.message = msg;
-	};
-
-	SourceError.prototype = Object.create(Error.prototype);
-	SourceError.prototype.name = 'SourceError';
-	SourceError.prototype.constructor = SourceError;
+	});
 
 	// LocalSource {{{1
 	// Constructor {{{2
 
-	var LocalSource = function (spec) {
+	var LocalSource = makeSubclass('LocalSource', Object, function (spec) {
 		var self = this;
 
 		self.varName = spec.varName;
@@ -17913,7 +18839,7 @@
 				self.cache.typeInfo.set(field, fti);
 			});
 		}
-	};
+	});
 
 	// #getData {{{2
 
@@ -17950,7 +18876,7 @@
 	// HttpSource {{{1
 	// Constructor {{{2
 
-	var HttpSource = function (spec, params, userTypeInfo) {
+	var HttpSource = makeSubclass('HttpSource', Object, function (spec, userTypeInfo) {
 		var self = this;
 
 		self.url = spec.url;
@@ -17959,14 +18885,14 @@
 
 		self.cache = null;
 		self.userTypeInfo = userTypeInfo;
-	};
+	});
 
 	// #parseData {{{2
 
 	HttpSource.prototype.parseData = function (data) {
 		var result = {
 				data: [],
-				typeInfo: new MIE.OrdMap()
+				typeInfo: new OrdMap()
 			};
 
 		//debug.info('DATA SOURCE // HTTP // PARSER', 'Data = ' + ((data instanceof XMLDocument) ? '%o' : '%O'), data);
@@ -18024,21 +18950,21 @@
 
 					result.typeInfo.get(fieldName).type = type.text();
 
-					var format$$1 = field.children('format');
-					if (format$$1.length > 1) {
+					var format = field.children('format');
+					if (format.length > 1) {
 						throw new SourceError('HTTP Data Source / XML Parser / Too many (root > typeInfo > ' + fieldName + ' > format) elements');
 					}
-					else if (format$$1.length === 1) {
-						if (format$$1.children().length > 0) {
+					else if (format.length === 1) {
+						if (format.children().length > 0) {
 							throw new SourceError('HTTP Data Source / XML Parser / (root > typeInfo > ' + fieldName + ' > format) element cannot have children');
 						}
-						result.typeInfo.get(fieldName).format = format$$1.text();
+						result.typeInfo.get(fieldName).format = format.text();
 					}
 				}
 			});
 		}
 		else if (typeof data === 'string') {
-			var decoded = papaparse.parse(data)
+			var decoded = papaparse.parse(data, { skipEmptyLines: true })
 				, fields = decoded.data[0];
 
 			underscore.each(decoded.data.slice(1), function (row) {
@@ -18099,8 +19025,10 @@
 		}
 
 		var al = logAsync('HttpSource#getData');
-		return jQuery.ajax(self.url, {
+		self.xhr = jQuery.ajax(self.url, {
 			method: self.method,
+			data: params,
+			traditional: true,
 			dataType: self.dataType,
 			error: function (jqXHR, textStatus, errorThrown) {
 				al.finish();
@@ -18113,6 +19041,8 @@
 				return cont(true, self.cache.data);
 			}
 		});
+
+		return self.xhr;
 	};
 
 	// #getTypeInfo {{{2
@@ -18141,14 +19071,21 @@
 		self.cache = null;
 	};
 
+	// #cancel {{{2
+
+	HttpSource.prototype.cancel = function () {
+		var self = this;
+
+		self.xhr.abort();
+	};
+
 	// FileSource {{{1
 	// Constructor {{{2
 
-	var FileSource = function (spec, params, userTypeInfo, source) {
+	var FileSource = makeSubclass('FileSource', Object, function (spec, userTypeInfo, source) {
 		var self = this;
 
 		self.spec = spec;
-		self.params = params;
 		self.userTypeInfo = userTypeInfo;
 		self.source = source;
 
@@ -18156,7 +19093,7 @@
 			data: [],
 			typeInfo: new OrdMap()
 		};
-	};
+	});
 
 	// #setToolbar {{{2
 
@@ -18267,7 +19204,7 @@
 	 *
 	 * @typedef Source~TypeInfo
 	 *
-	 * @type {Object<string,string|Source~TypeInfo_Field>}
+	 * @type {Object<string,string|Source~FieldTypeInfo>}
 	 */
 
 	/**
@@ -18278,7 +19215,7 @@
 	 * updates this property, it's possible to perform your own conversion and still get the benefit of
 	 * type decoding on the result.
 	 *
-	 * @typedef Source~TypeInfo_Field
+	 * @typedef Source~FieldTypeInfo
 	 *
 	 * @property {string} type What type of data are we receiving?  Must be one of the following:
 	 * string, number, date, datetime, currency.
@@ -18287,13 +19224,35 @@
 	 * will decode the input.  Note that decoding comes *after* any conversion functions are executed.
 	 */
 
+	/**
+	 * Source specification.
+	 *
+	 * @typedef Source~Spec
+	 *
+	 * @property {string} name
+	 * @property {string} error
+	 * @property {string} type
+	 *
+	 * @property {Array.<string>|Object.<string,Array.<string>>} conversion
+	 * As an array, apply the named conversions to all fields in the data.  As an object, each key is a
+	 * field, and the corresponding value is the named conversions to apply to that field only.
+	 *
+	 * ```
+	 * conversion: ['foo', {'name': ['bar']}]
+	 * ```
+	 *
+	 * This example applies the conversion *foo* to all fields, and the conversion *bar* only to values
+	 * in the `name` field.
+	 */
+
 	// Constructor {{{2
 
 	/**
 	 * Abstract data source that wraps specific data source implementations (e.g. for system reports or
 	 * the JSON API).
 	 *
-	 * @param {object} spec
+	 * @param {Source~Spec} spec
+	 * Specification of the source.
 	 *
 	 * @param {object} params
 	 *
@@ -18330,7 +19289,7 @@
 	 * @property {boolean} guessColumnTypes
 	 */
 
-	var Source = function (spec, params, userTypeInfo, opts) {
+	var Source = makeSubclass('Source', Object, function (spec, params, userTypeInfo, opts) {
 		var self = this;
 
 		self.name = spec.name; // The name of the data source, by which it can be addressed later.
@@ -18364,7 +19323,7 @@
 			throw new SourceError('Unsupported data source type: ' + self.type);
 		}
 
-		self.origin = new Source.sources[self.type](spec, params, userTypeInfo, self);
+		self.origin = new Source.sources[self.type](spec, userTypeInfo, self);
 
 		var checkConversionArray = function (convs, field) {
 			// Check the validity of all the specified conversions.
@@ -18403,13 +19362,35 @@
 
 		self.conversion = spec.conversion;
 
-		self.locks.getData = new Lock('Get Data');
-	};
+		self.locks.getData = new Lock(self.getDebugTag() + ' // GET DATA');
+		self.locks.refresh = new Lock(self.getDebugTag() + ' // REFRESH');
+	});
 
-	Source.prototype = Object.create(Object.prototype);
-	Source.prototype.constructor = Source;
+	// Mixins {{{2
 
-	// Events {{{2
+	mixinEventHandling(Source, [
+			'fetchDataBegin'
+		, 'fetchDataEnd'
+		, 'fetchDataCancel'
+		, 'dataUpdated'
+		, 'getTypeInfo'
+	]);
+
+	mixinDebugging(Source);
+
+	// Event JSDoc {{{2
+
+	/**
+	 * Fired when we start fetching data from the origin.
+	 *
+	 * @event Source#fetchDataBegin
+	 */
+
+	/**
+	 * Fired when we've received data from the origin.
+	 *
+	 * @event Source#fetchDataEnd
+	 */
 
 	/**
 	 * Fired when new data is available.
@@ -18422,11 +19403,6 @@
 	 *
 	 * @event Source#getTypeInfo
 	 */
-
-	mixinEventHandling(Source, 'Source', [
-			'dataUpdated'
-		, 'getTypeInfo'
-	]);
 
 	// .sources {{{2
 
@@ -18479,9 +19455,11 @@
 		}
 
 		self.locks.getData.lock();
+		self.fire('fetchDataBegin', {async: true});
 		return self.origin.getData(self.createParams(), function (ok, data) {
 			if (!ok) {
 				self.locks.getData.unlock();
+				self.fire('fetchDataEnd', {async: true});
 				return cont(false);
 			}
 
@@ -18489,6 +19467,7 @@
 				self.postProcess(data, function (finalData) {
 					self.cache.data = finalData;
 					self.locks.getData.unlock();
+					self.fire('fetchDataEnd', {async: true});
 					return cont(true, finalData);
 				});
 			}
@@ -18579,25 +19558,38 @@
 				v.overridden = false;
 			});
 
-			if (self.userTypeInfo !== undefined) {
-				underscore.each(self.userTypeInfo, function (fieldTypeInfo, field) {
+			// Merge user-specified type information with whatever we got from the source.
+
+			if (self.userTypeInfo != null) {
+				underscore.each(self.userTypeInfo, function (userFti, field) {
 					if (!typeInfo.isSet(field)) {
 						log.warn('Overriding type information on field "' + field + '" which is not present in the source.');
 						typeInfo.set(field, {});
 					}
-					if (typeof fieldTypeInfo === 'string') {
-						fieldTypeInfo = {
-							type: fieldTypeInfo
-						};
+
+					// Just a string for the value is a shortcut for specifying the type.
+					// EXAMPLE: {field1: 'number'} => {field1: {type: 'number'}}
+
+					if (typeof userFti === 'string') {
+						userFti = { type: userFti };
 					}
-					underscore.extend(typeInfo.get(field), fieldTypeInfo);
-					typeInfo.get(field).overridden = true;
-					debug.info('SOURCE // GET TYPE INFO', 'Overriding origin type information { field = "' + field + '", typeInfo = %O }', fieldTypeInfo);
+
+					var fti = typeInfo.get(field);
+
+					// Mark when the type is overridden by the user, so we don't try to guess it later.
+
+					if (userFti.type != null) {
+						fti.overridden = true;
+					}
+
+					underscore.extend(fti, userFti);
+
+					self.debug('GET TYPE INFO', 'Overriding origin type information { field = "' + field + '", typeInfo = %O }', userFti);
 				});
 			}
 
 			self.cache.typeInfo = typeInfo;
-			debug.info('SOURCE // GET TYPE INFO', 'Type Info = %O', deepCopy(self.cache.typeInfo.asMap()));
+			self.debug('GET TYPE INFO', 'Type Info = %O', deepCopy(self.cache.typeInfo.asMap()));
 
 			self.fire(Source.events.getTypeInfo, null, self.cache.typeInfo, self);
 			return cont(true, self.cache.typeInfo);
@@ -18637,14 +19629,14 @@
 			throw new SourceError('Data Source / Post Process / Data is not an array');
 		}
 
-		debug.info('SOURCE // POST-PROCESSING', 'Beginning post-processing');
+		self.debug('POST-PROCESSING', 'Beginning post-processing');
 
 		self.getTypeInfo(function (ok, typeInfo) {
 			if (!ok) {
 				return cont(data);
 			}
 
-			debug.info('SOURCE // POST-PROCESSING', 'Received type info from source origin: %O', typeInfo.asMap());
+			self.debug('POST-PROCESSING', 'Received type info from source origin: %O', typeInfo.asMap());
 
 			typeInfo.each(function (fti) {
 				if (fti.type == null) {
@@ -18721,7 +19713,7 @@
 				});
 			});
 
-			debug.info('SOURCE // POST-PROCESSING', 'Post-processing finished');
+			self.debug('POST-PROCESSING', 'Post-processing finished');
 
 			return cont(data);
 		});
@@ -18759,13 +19751,14 @@
 	// #guessTypes {{{2
 
 	Source.prototype.guessTypes = function (data, typeInfo) {
+		var self = this;
 
 		typeInfo.each(function (fti, f) {
 			if (fti.overridden || fti.type !== 'string') {
 				return;
 			}
 
-			debug.info('DATA SOURCE // CONVERSION // TYPE GUESSING', 'Guessing type for field "%s"', fti.field);
+			self.debug('CONVERSION // TYPE GUESSING', 'Guessing type for field "%s"', fti.field);
 
 			var guess = null;
 
@@ -18777,13 +19770,13 @@
 					guess = newGuess;
 				}
 				else if (newGuess !== guess) {
-					debug.info('DATA SOURCE // CONVERSION // TYPE GUESSING', 'For field "%s", previous guess "%s" disagrees with current guess "%s" (rowNum = %d, value = %O)', f, guess, newGuess, i, val);
+					self.debug('CONVERSION // TYPE GUESSING', 'For field "%s", previous guess "%s" disagrees with current guess "%s" (rowNum = %d, value = %O)', f, guess, newGuess, i, val);
 					guess = 'string';
 				}
 			}
 
 			if (guess != null && guess !== 'string') {
-				debug.info('DATA SOURCE // CONVERSION // TYPE GUESSING', 'For field "%s", successfully guessed new type "%s"', f, guess);
+				self.debug('CONVERSION // TYPE GUESSING', 'For field "%s", successfully guessed new type "%s"', f, guess);
 				fti.type = guess;
 			}
 		});
@@ -18830,7 +19823,7 @@
 				}
 
 				if (fti.deferDecoding) {
-					debug.info('SOURCE // CONVERSION', 'Deferring conversion until <%s> { field = "%s", type = "%s", format = "%s" }',
+					self.debug('CONVERSION', 'Deferring conversion until <%s> { field = "%s", type = "%s", format = "%s" }',
 						fti.needsDecoding ? 'SORT' : 'DISPLAY', f, fti.type, fti.format);
 				}
 			}
@@ -18847,7 +19840,7 @@
 			return;
 		}
 
-		debug.info('SOURCE // CONVERSION', 'Converting all values: field = "%s" ; type = %s ; internalType = %s ; valueTypeOf = %s', field, fti.type, fti.internalType, typeof(getProp(data, 0, field, 'value')));
+		self.debug('CONVERSION', 'Converting all values: field = "%s" ; type = %s ; internalType = %s ; valueTypeOf = %s', field, fti.type, fti.internalType, typeof(getProp(data, 0, field, 'value')));
 
 		underscore.each(data, function (row) {
 			convert(row[field], self.cache.typeInfo.get(field));
@@ -18876,9 +19869,43 @@
 
 		self.cache = {};
 
-		debug.info('SOURCE (' + self.name + ')', 'Cleared cache');
+		self.fire('dataUpdated');
+	};
 
-		self.fire(Source.events.dataUpdated);
+	// #refresh {{{2
+
+	Source.prototype.refresh = function () {
+		var self = this;
+
+		// When locked, a data updated is already in progress.  Just wait and it will notify clients to
+		// re-pull the data from us.
+
+		if (self.locks.refresh.isLocked()) {
+			return;
+		}
+
+		self.debug(null, 'Refreshing...');
+
+		self.locks.refresh.lock();
+
+		if (typeof self.origin.clearCachedData === 'function') {
+			self.origin.clearCachedData();
+		}
+
+		var tmp = self.cache;
+		self.cache = {};
+
+		self.getData(function (ok) {
+			self.locks.refresh.unlock();
+			if (ok) {
+				self.fire('dataUpdated');
+			}
+			else {
+				// Restore cached data.  Not sure if this is really necessary because the View should have its
+				// own reference to this data.
+				self.cache = tmp;
+			}
+		});
 	};
 
 	// #createParams {{{2
@@ -18902,11 +19929,11 @@
 		}
 
 		underscore.each(self.params, function (p) {
-			debug.info('SOURCE // CREATE PARAMS', 'Parameter =', p);
+			self.debug('CREATE PARAMS', 'Parameter =', p);
 			p.toParams(obj);
 		});
 
-		debug.info('SOURCE // CREATE PARAMS', 'Final Parameters =', obj);
+		self.debug('CREATE PARAMS', 'Final Parameters =', obj);
 
 		// The JSON clause parameters will be objects that need to be serialized first, so they can be
 		// sent to the server and unpacked there.
@@ -18942,12 +19969,51 @@
 		//}
 	};
 
+	// #isCancellable {{{2
+
+	/**
+	 * Indicates that retrieving data from the origin is cancellable via the `cancel()` method.
+	 *
+	 * @returns {boolean}
+	 * True if the `cancel()` method works, false otherwise.
+	 */
+
+	Source.prototype.isCancellable = function () {
+		var self = this;
+
+		return typeof self.origin.cancel === 'function';
+	};
+
+	// #cancel {{{2
+
+	/**
+	 * Cancel retrieval of the data from the origin.
+	 */
+
+	Source.prototype.cancel = function () {
+		var self = this;
+
+		if (typeof self.origin.cancel === 'function') {
+			self.origin.cancel();
+			self.locks.getData.clear();
+			self.locks.refresh.clear();
+			self.fire('fetchDataCancel');
+		}
+	};
+
 	// #toString {{{2
 
 	Source.prototype.toString = function () {
 		var self = this;
 
 		return 'Source <' + self.name + ', ' + self.type + '>';
+	};
+
+	// #getDebugTag {{{2
+
+	Source.prototype.getDebugTag = function () {
+		var self = this;
+		return 'SOURCE {name="' + self.name + '", type=' + self.type + '}';
 	};
 
 	// #setToolbar {{{2
@@ -19047,26 +20113,67 @@
 			return this.css('display') === 'none' || this.css('visibility') !== 'visible';
 		},
 
+		_addTrailing: function (chars) {
+			var t = this.text();
+			if (t.slice(chars.length * -1) !== chars){
+				this.text(t + chars);
+			}
+		},
+
+		_stripTrailing: function (chars) {
+			var t = this.text();
+			if (t.slice(chars.length * -1) === chars) {
+				this.text(t.slice(0, chars.length * -1));
+			}
+		},
+
+		// _makeIconCheckbox('foo') -->
+		//   off = fontawesome('foo'), class = 'wcdv_icon_checkbox_off'
+		//   on = fontawesome('foo'), class = 'wcdv_icon_checkbox_on'
+		// _makeIconCheckbox('foo', 'bar') -->
+		//   off = fontawesome('foo')
+		//   on = fontawesome('bar')
+		// _makeIconCheckbox(obj) -->
+		//   off = fontawesome(obj.off.icon), class = obj.off.classes
+		//   on = fontawesome(obj.on.icon), class = obj.on.classes
+
 		_makeIconCheckbox: function () {
 			var self = this
 				, args = Array.prototype.slice.call(arguments)
 				, opts = {};
 
 			if (args.length === 1) {
-				opts = args[0];
+				if (typeof args[0] === 'string') {
+					opts = {
+						on: {
+							icon: args[0],
+							classes: 'wcdv_icon_checkbox_on'
+						},
+						off: {
+							icon: args[0],
+							classes: 'wcdv_icon_checkbox_off'
+						}
+					};
+				}
+				else {
+					opts = args[0];
+				}
 			}
 			else if (args.length === 2) {
-				opts.on = {
-					icon: args[0]
-				};
-				opts.off = {
-					icon: args[1]
+				opts = {
+					on: {
+						icon: args[0]
+					},
+					off: {
+						icon: args[1]
+					}
 				};
 			}
 
 			var button = jQuery('<button>', {
 				'type': 'button',
-				'disabled': jQuery(self).prop('disabled')
+				'disabled': jQuery(self).prop('disabled'),
+				'title': self.attr('title')
 			})
 				.addClass('wcdv_icon_button wcdv_button_left')
 				.on('click', function () {
@@ -19075,19 +20182,23 @@
 				})
 			;
 
-			var onIcon = fontAwesome(opts.on.icon).hide().appendTo(button);
-			var offIcon = fontAwesome(opts.off.icon).hide().appendTo(button);
+			var onIcon = fontAwesome(opts.on.icon, opts.on.classes).css('display', 'inline-block').hide().appendTo(button);
+			var offIcon = fontAwesome(opts.off.icon, opts.off.classes).css('display', 'inline-block').hide().appendTo(button);
 
 			var updateIcon = function () {
 				if (self._isChecked()) {
 					onIcon.show();
 					offIcon.hide();
-					button.attr('title', opts.on.tooltip);
+					if (opts.on.tooltip != null) {
+						button.attr('title', opts.on.tooltip);
+					}
 				}
 				else {
 					onIcon.hide();
 					offIcon.show();
-					button.attr('title', opts.off.tooltip);
+					if (opts.off.tooltip != null) {
+						button.attr('title', opts.off.tooltip);
+					}
 				}
 			};
 
@@ -19385,6 +20496,29 @@
 		}
 	});
 
+	/**
+	 * @file
+	 * Contains the implementation of "grid filters" which are the dynamically applied filters that are
+	 * shown in the filter control of a grid.  They set the filter on the {@link View} associated with
+	 * the {@link Grid}.
+	 *
+	 * If you're looking for the parameters that get sent to the {@link Source} then you want {@link
+	 * source_param.js} instead.
+	 *
+	 * ## Classes
+	 *
+	 * - {@link GridFilter}
+	 *   - {@link StringTextboxGridFilter}
+	 *   - {@link StringDropdownGridFilterChosen}
+	 *   - {@link StringDropdownGridFilterSumo}
+	 *   - {@link NumberTextboxGridFilter}
+	 *   - {@link NumberCheckboxGridFilter}
+	 *   - {@link DateSingleGridFilter}
+	 *   - {@link DateRangeGridFilter}
+	 *   - {@link BooleanCheckboxGridFilter}
+	 * - {@link GridFilterSet}
+	 */
+
 	// GridFilter {{{1
 
 	// Superclass {{{2
@@ -19431,7 +20565,7 @@
 			return 'GridFilter_' + id++;
 		};
 
-		return function (field, gridFilterSet, typeInfo, opts) {
+		return makeSubclass('GridFilter', Object, function (field, gridFilterSet, typeInfo, opts) {
 			var self = this;
 			var localRemoveButton;
 
@@ -19468,11 +20602,8 @@
 					self.adjustInputWidth({ useSizingElement: true, fromColumnResize: true });
 				});
 			}
-		};
+		});
 	})();
-
-	GridFilter.prototype = Object.create(Object.prototype);
-	GridFilter.prototype.constructor = GridFilter;
 
 	// #getValue {{{3
 
@@ -19509,9 +20640,15 @@
 		case 'date':
 		case 'time':
 		case 'datetime':
+			if (self.input.val() === '') {
+				return undefined;
+			}
 			return fti.internalType === 'moment' ? moment(self.input.val()) : self.input.val();
 		case 'number':
 		case 'currency':
+			if (self.input.val() === '') {
+				return undefined;
+			}
 			switch (fti.internalType) {
 			case 'bignumber':
 				return new bignumber(self.input.val());
@@ -19922,7 +21059,10 @@
 
 		GridFilter.apply(self, arguments);
 
-		self.input = jQuery('<input type="text">');
+		self.input = jQuery('<input>', {
+			'type': 'text'
+		});
+		self.input.attr('size', '10');
 		self.input.on('change', function (evt) {
 			self.gridFilterSet.update(false);
 		});
@@ -20159,6 +21299,10 @@
 		var self = this
 			, result;
 
+		if (self.selectedDates == null) {
+			return undefined;
+		}
+
 		if (self.isRange()) {
 			result = {
 				'start': moment(self.selectedDates[0]),
@@ -20180,6 +21324,15 @@
 		}
 
 		return result;
+	};
+
+	// #setValue {{{3
+
+	DateRangeGridFilter.prototype.setValue = function (val) {
+		var self = this;
+
+		self.selectedDates = val;
+		self.widget.setDate(val);
 	};
 
 	// #getOperator {{{3
@@ -20304,7 +21457,7 @@
 	 * internally when loading preferences to avoid updating for every single filter.
 	 */
 
-	var GridFilterSet$1 = function (view, prefs, gridTable, progress, opts) {
+	var GridFilterSet = makeSubclass('GridFilterSet', Object, function (view, prefs, gridTable, progress, opts) {
 		var self = this;
 
 		self.view = view;
@@ -20324,10 +21477,7 @@
 		};
 
 		self.delayUpdate = false;
-	};
-
-	GridFilterSet$1.prototype = Object.create(Object.prototype);
-	GridFilterSet$1.prototype.constructor = GridFilterSet$1;
+	});
 
 	// Events {{{2
 
@@ -20343,7 +21493,7 @@
 	 * @event GridFilterSet#filterRemoved
 	 */
 
-	mixinEventHandling(GridFilterSet$1, 'GridFilterSet', [
+	mixinEventHandling(GridFilterSet, [
 			'filterAdded'
 		, 'filterRemoved'
 		, 'widgetResizedHoriz'
@@ -20367,7 +21517,7 @@
 	 * it, if we've reached the maximum number of filters allowed on the column.
 	 */
 
-	GridFilterSet$1.prototype.add = function (field, target, opts) {
+	GridFilterSet.prototype.add = function (field, target, opts) {
 		var self = this
 			, opts = opts || {}
 			, filter;
@@ -20407,7 +21557,7 @@
 			opts.filterBtn.hide();
 		}
 
-		self.fire(GridFilterSet$1.events.filterAdded);
+		self.fire(GridFilterSet.events.filterAdded);
 
 		// Check to see if this filter should take effect as soon as it is created.
 
@@ -20444,7 +21594,7 @@
 	 * div which is placed within the `target` is used.
 	 */
 
-	GridFilterSet$1.prototype.build = function (field, target, opts) {//filterType, filterBtn, target, onRemove, sizingElement, noRemoveBtn) {
+	GridFilterSet.prototype.build = function (field, target, opts) {//filterType, filterBtn, target, onRemove, sizingElement, noRemoveBtn) {
 		var self = this;
 
 		// We use a data source to get the type information, so if the grid was built without a data
@@ -20500,7 +21650,7 @@
 	 * (e.g. a multi-select dropdown only allows one "item" as that's all you need).
 	 */
 
-	GridFilterSet$1.prototype.remove = function (id, filterBtn, noEvent) {
+	GridFilterSet.prototype.remove = function (id, filterBtn, noEvent) {
 		var self = this
 			, filter = self.filters.byId[id];
 
@@ -20529,20 +21679,20 @@
 		}
 
 		if (!noEvent) {
-			self.fire(GridFilterSet$1.events.filterRemoved);
+			self.fire(GridFilterSet.events.filterRemoved);
 		}
 	};
 
 	// #removeField {{{2
 
-	GridFilterSet$1.prototype.removeField = function (fieldName, filterBtn) {
+	GridFilterSet.prototype.removeField = function (fieldName, filterBtn) {
 		var self = this;
 
 		underscore.each(self.filters.byCol[fieldName], function (filter) {
 			self.remove(filter.getId(), filterBtn, true);
 		});
 
-		self.fire(GridFilterSet$1.events.filterRemoved);
+		self.fire(GridFilterSet.events.filterRemoved);
 	};
 
 	// #reset {{{2
@@ -20551,7 +21701,7 @@
 	 * Clear all filters.
 	 */
 
-	GridFilterSet$1.prototype.reset = function (opts) {
+	GridFilterSet.prototype.reset = function (opts) {
 		var self = this;
 
 		opts = opts || {};
@@ -20588,7 +21738,7 @@
 	 * Set the filters on the View based on what the user has entered into the user interface.
 	 */
 
-	GridFilterSet$1.prototype.update = function () {
+	GridFilterSet.prototype.update = function () {
 		var self = this
 			, spec = {};
 
@@ -20646,26 +21796,117 @@
 
 	// #set {{{2
 
-	GridFilterSet$1.prototype.set = function (field, fieldSpec) {
+	GridFilterSet.prototype.set = function (field, fieldSpec) {
 		var self = this;
 
 		if (typeof fieldSpec !== 'object') {
 			fieldSpec = { '$eq': fieldSpec };
 		}
 
-		underscore.each(fieldSpec, function (val, op) {
-			debug.info('GRID FILTER SET',
-				'Setting filter: { field = %s ; operator = %s ; value = %s }',
-				field, op, typeof val === 'object' ? JSON.stringify(val) : val);
-			var filters = self.filters.byCol[field];
+		var filters = self.filters.byCol[field];
 
-			if (filters == null) {
-				return;
+		if (filters == null || filters.length == null || filters.length === 0) {
+			// ERROR: No filter exists for that field.
+			return;
+		}
+
+		var widget = filters[0];
+
+		if (widget instanceof DateRangeGridFilter && '$lte' in fieldSpec && '$gte' in fieldSpec) {
+			widget.setValue([fieldSpec['$gte'], fieldSpec['$lte']]);
+		}
+		else {
+			underscore.each(fieldSpec, function (val, op) {
+				debug.info('GRID FILTER SET',
+					'Setting filter: { field = %s ; operator = %s ; value = %s }',
+					field, op, typeof val === 'object' ? JSON.stringify(val) : val);
+
+				widget.setOperator(op);
+				widget.setValue(val);
+			});
+		}
+	};
+
+	// GroupFunWin {{{1
+
+	var GroupFunWin = makeSubclass('GroupFunWin', Object, function (title, groupFuns) {
+		var self = this;
+
+		var winEffect = {
+			effect: 'fade',
+			duration: 100
+		};
+
+		var selected = null;
+
+		self.win = jQuery('<div>', { title: title }).dialog({
+			autoOpen: false,
+			modal: true,
+			position: {
+				my: 'center',
+				at: 'center',
+				of: window
+			},
+			classes: {
+				"ui-dialog": "ui-corner-all wcdv_dialog",
+				"ui-dialog-titlebar": "ui-corner-all",
+			},
+			show: winEffect,
+			hide: winEffect,
+			open: function () {
+				selected = null;
+			},
+			close: function () {
+				self.cb(selected);
 			}
-
-			filters[0].setOperator(op);
-			filters[0].setValue(val);
 		});
+
+		self.buttons = {};
+
+		groupFuns.each(function (gf, gfName) {
+			self.buttons[gfName] = jQuery('<button>', {
+				'type': 'button',
+				'class': 'wcdv_option',
+				'data-wcdv-groupfunname': gfName,
+				'title': gf.displayName
+			})
+				.text(gf.displayName)
+				.on('click', function () {
+					selected = gfName;
+					self.win.dialog('close');
+				});
+
+			self.win.append(jQuery('<div>').append(self.buttons[gfName]));
+		});
+
+		// Add the "None" button to use no function.
+
+		self.buttons['none'] = jQuery('<button>', {
+			'type': 'button',
+			'class': 'wcdv_option',
+			'data-wcdv-groupfunname': 'none',
+			'title': 'None'
+		})
+			.text('None')
+			.on('click', function () {
+				selected = 'none';
+				self.win.dialog('close');
+			});
+
+		self.win.append(jQuery('<div>').append(self.buttons['none']));
+	});
+
+	// #show {{{2
+
+	GroupFunWin.prototype.show = function (gfName, cb) {
+		var self = this;
+		self.cb = cb;
+
+		self.win.dialog('open');
+
+		if (gfName != null && self.buttons[gfName] != null) {
+			self.buttons[gfName].focus();
+		}
 	};
 
 	/*
@@ -20708,7 +21949,9 @@
 	 *
 	 * @property {GridControl} control
 	 *
-	 * @property {string} field
+	 * @property {string|object} spec
+	 * If a string, simply the field to add.  If an object, should contain a `field` property along with
+	 * anything else that this instance needs to carry.
 	 *
 	 * @property {string} displayText
 	 *
@@ -20726,16 +21969,31 @@
 	 * A button that is used to remove the control field.
 	 */
 
-	var GridControlField = makeSubclass('GridControlField', Object, function (control, field, displayText, colConfig, opts) {
-		var self = this;
+	var GridControlField = (function () {
+		var CONTROL_FIELD_ID = 0;
+		return makeSubclass('GridControlField', Object, function (control, spec, displayText, colConfig, opts) {
+			var self = this;
 
-		self.control = control;
-		self.field = field;
-		self.displayText = displayText;
-		self.colConfig = colConfig;
-		self.opts = opts;
-		self.ui = {};
-	});
+			self.control = control;
+
+			if (typeof spec === 'string') {
+				self.field = {
+					field: spec
+				};
+			}
+			else {
+				self.field = deepCopy(spec);
+			}
+			self.displayText = displayText;
+			self.colConfig = colConfig;
+			self.opts = opts;
+
+			self.fti = self.control.typeInfo.get(self.field.field);
+
+			self.ui = {};
+			self.id = CONTROL_FIELD_ID++;
+		});
+	})();
 
 	// #draw {{{2
 
@@ -20748,6 +22006,7 @@
 
 	GridControlField.prototype.draw = function () {
 		var self = this;
+		var label = self.displayText || (self.colConfig && self.colConfig.displayText) || self.field.field;
 
 		self.ui.removeButton = jQuery('<button>', {'type': 'button'})
 			.append(fontAwesome('F146'))
@@ -20758,9 +22017,15 @@
 			})
 		;
 
+		self.ui.fieldLabel = jQuery('<span>', {
+			'class': 'wcdv_field_name',
+			'title': label
+		})
+			.text(label);
+
 		self.ui.root = jQuery('<div>', { 'class': 'wcdv_field' })
 			.append(self.ui.removeButton)
-			.append(jQuery('<span>').text(self.displayText || (self.colConfig && self.colConfig.displayText) || self.field))
+			.append(self.ui.fieldLabel)
 		;
 
 		self._addErrorIndicator(self.ui.root, 'wcdv_aggregate_control_error');
@@ -20826,7 +22091,17 @@
 			.appendTo(parent);
 	};
 
-	// GroupControlField {{{1
+	// #getSpec {{{2
+
+	GridControlField.prototype.getSpec = function () {
+		var self = this;
+
+		return {
+			field: self.field.field
+		};
+	};
+
+	// FunGridControlField {{{1
 
 	// Constructor {{{2
 
@@ -20835,7 +22110,101 @@
 	 * @extends GridControlField
 	 */
 
-	var GroupControlField = makeSubclass('GroupControlField', GridControlField);
+	var FunGridControlField = makeSubclass('FunGridControlField', GridControlField);
+
+	// #draw {{{2
+
+	FunGridControlField.prototype.draw = function () {
+		var self = this;
+
+		self.super.draw();
+
+		// Let's find out what group functions there are that work on the type of the field that we
+		// represent, e.g. if we are a date, find out what group functions work on dates.
+
+		var applicableGroupFuns = GROUP_FUNCTION_REGISTRY.filter(function (gf) {
+			if (self.fti == null) {
+				return false;
+			}
+			return gf.allowedTypes.indexOf(self.fti.type) >= 0;
+		});
+
+		if (applicableGroupFuns.size() > 0) {
+			// When there are some group functions for the type of this field, we need to create a window to
+			// choose between them, plus a button to show the window.
+
+			self.ui.groupFunWin = new GroupFunWin('Apply Function to ' + self.field.field, applicableGroupFuns);
+
+			self.ui.groupFunWinBtn = jQuery('<button>', {
+				'type': 'button',
+				'data-wcdv-role': 'set-group-fun',
+				title: 'Show functions available for this field'
+			})
+				.addClass('wcdv_icon_button wcdv_button_left wcdv_text-primary')
+				.on('click', function () {
+					self.showFunWin();
+				})
+				.append(fontAwesome('fa-bolt'))
+				.appendTo(self.ui.root)
+			;
+
+			if (self.field.fun != null) {
+				var gf = GROUP_FUNCTION_REGISTRY.get(self.field.fun);
+				self.ui.fieldLabel.text(self.field.field + ' (' + gf.displayName + ')');
+				self.ui.fieldLabel.attr('title', self.field.field + ' (' + gf.displayName + ')');
+			}
+			self.ui.fieldLabel.after(self.ui.groupFunWinBtn);
+		}
+
+		return self.ui.root;
+	};
+
+	// #getSpec {{{2
+
+	FunGridControlField.prototype.getSpec = function () {
+		var self = this;
+
+		return {
+			field: self.field.field,
+			fun: self.field.fun
+		}
+	};
+
+	// #showFunWin {{{2
+
+	FunGridControlField.prototype.showFunWin = function () {
+		var self = this;
+
+		self.ui.groupFunWin.show(self.field.fun || 'none', function (groupFunName) {
+			if (groupFunName != null) {
+				if (groupFunName === 'none') {
+					self.field.fun = null;
+					self.ui.fieldLabel.text(self.field.field);
+				}
+				else {
+					self.field.fun = groupFunName;
+					var gf = GROUP_FUNCTION_REGISTRY.get(self.field.fun);
+					self.ui.fieldLabel.text(self.field.field + ' (' + gf.displayName + ')');
+				}
+				self.control.updateView();
+			}
+			else if (self.field.fun === undefined) {
+				self.field.fun = null;
+				self.control.updateView();
+			}
+		});
+	};
+
+	// GroupControlField {{{1
+
+	// Constructor {{{2
+
+	/**
+	 * @class
+	 * @extends FunGridControlField
+	 */
+
+	var GroupControlField = makeSubclass('GroupControlField', FunGridControlField);
 
 	// PivotControlField {{{1
 
@@ -20843,10 +22212,10 @@
 
 	/**
 	 * @class
-	 * @extends GridControlField
+	 * @extends FunGridControlField
 	 */
 
-	var PivotControlField = makeSubclass('PivotControlField', GridControlField);
+	var PivotControlField = makeSubclass('PivotControlField', FunGridControlField);
 
 	// FilterControlField {{{1
 	// Constructor {{{2
@@ -20867,7 +22236,7 @@
 		self.ui.filterContainer = jQuery('<div>')
 			.addClass('wcdv_filter_control_filter_container')
 			.appendTo(self.ui.root);
-		self.control.gfs.add(self.field, self.ui.filterContainer, {
+		self.control.gfs.add(self.field.field, self.ui.filterContainer, {
 			filterType: self.colConfig && self.colConfig.filter
 		});
 
@@ -20906,54 +22275,17 @@
 
 		self._addErrorIndicator(self.ui.root, 'wcdv_aggregate_control_error');
 
-		var aggDefn = AGGREGATE_REGISTRY.get(self.field);
+		var aggDefn = AGGREGATE_REGISTRY.get(self.field.field);
 
-		self.ui.isHiddenCheckbox = jQuery('<input>', {
-			'type': 'checkbox'
-		})
-			.prop('checked', getProp(self.opts, 'isHidden'))
-			.on('change', function () {
-				self.control.updateView();
-			})
-			.appendTo(self.ui.root)
-			._makeIconCheckbox('fa-eye-slash wcdv_text-primary', 'fa-eye wcdv_text-primary')
-		;
-
-		if (self.control.view.hasClientKind('graph')) {
-			self.ui.graphBtn = jQuery('<button>', {
-				'type': 'button'
-			})
-				.on('click', function () {
-					// TODO Think of a better way to do this.  I feel like the coupling here is too high.
-
-					self.control.clearGraphFlag();
-					self.shouldGraph = true;
-					self.control.updateView();
-				})
-				.append(fontAwesome('fa-bar-chart'))
-				.appendTo(self.ui.root)
-			;
-		}
-
-		if (aggDefn.prototype.options != null) {
-			jQuery('<button>', {
-				'type': 'button',
-				title: 'Edit Options'
-			})
-				.addClass('wcdv_icon_button wcdv_button_left wcdv_text-primary')
-				.on('click', function () {
-					self.ui.optionsDialog.dialog('open');
-				})
-				.append(fontAwesome('F044'))
-				.appendTo(self.ui.root)
-			;
-			self._makeOptionsDialog(aggDefn);
-		}
-
-		var fieldList = jQuery('<ul>').appendTo(self.ui.root);
+		var fieldList = jQuery('<ul>', {
+			'class': 'wcdv_aggregate_control_fieldlist'
+		}).appendTo(self.ui.root);
 
 		for (var i = 0; i < aggDefn.prototype.fieldCount; i += 1) {
 			var li = jQuery('<li>').addClass('wcdv_aggregate_field').appendTo(fieldList);
+			if (getProp(aggDefn.prototype, 'fieldInfo', i, 'name')) {
+				var label = jQuery('<label>').text(aggDefn.prototype.fieldInfo[i].name + ':').appendTo(li);
+			}
 			var select = jQuery('<select>')
 				.on('change', function (evt) {
 					select.children('option[data-wcdv-bad-field]').filter(function (eltIndex, elt) {
@@ -20997,6 +22329,49 @@
 				dropdown.val(self.opts.fields[i]);
 			}
 		});
+
+		if (aggDefn.prototype.options != null) {
+			jQuery('<button>', {
+				'type': 'button',
+				title: 'Edit Options'
+			})
+				.addClass('wcdv_icon_button wcdv_button_left wcdv_text-primary')
+				.on('click', function () {
+					self.ui.optionsDialog.dialog('open');
+				})
+				.append(fontAwesome('F044'))
+				.appendTo(self.ui.root)
+			;
+			self._makeOptionsDialog(aggDefn);
+		}
+
+		if (self.control.view.hasClientKind('graph')) {
+			self.ui.graphBtn = jQuery('<button>', {
+				'type': 'button'
+			})
+				.addClass('wcdv_icon_button wcdv_text-primary')
+				.on('click', function () {
+					// TODO Think of a better way to do this.  I feel like the coupling here is too high.
+
+					self.control.clearGraphFlag();
+					self.shouldGraph = true;
+					self.control.updateView();
+				})
+				.append(fontAwesome('fa-bar-chart'))
+				.appendTo(self.ui.root)
+			;
+		}
+
+		self.ui.isHiddenCheckbox = jQuery('<input>', {
+			'type': 'checkbox'
+		})
+			.prop('checked', getProp(self.opts, 'isHidden'))
+			.on('change', function () {
+				self.control.updateView();
+			})
+			.appendTo(self.ui.root)
+			._makeIconCheckbox('fa-eye-slash wcdv_text-primary', 'fa-eye wcdv_text-primary')
+		;
 
 		return self.ui.root;
 	};
@@ -21084,7 +22459,7 @@
 		var self = this;
 
 		return {
-			fun: self.field,
+			fun: self.field.field,
 			name: null,
 			fields: underscore.map(self.fieldDropdowns, function (dropdown) {
 				return dropdown.val();
@@ -21138,11 +22513,32 @@
 	 * @property {Object.<string, Array.<ControlField>>} controlFieldsByField
 	 * Object for looking up control fields by name.
 	 *
+	 * @property {Object.<string, ControlField>} controlFieldsById
+	 * Object for looking up control fields by ID.
+	 *
 	 * @property {object} ui
 	 * Object containing different user interface components.
 	 *
 	 * @property {jQuery} ui.dropdown
 	 * The SELECT element containing the available fields.
+	 *
+	 * @property {boolean} [prototype.isHorizontal=false]
+	 * If true, display the list horizontally rather than vertically.
+	 *
+	 * @property {boolean} [prototype.isReorderable=true]
+	 * If true, display an arrow for reordering the items in the list (when `isHorizontal=false`).
+	 *
+	 * @property {boolean} [prototype.showColumns=true]
+	 * If true, display a dropdown with field names to choose from.
+	 *
+	 * @property {boolean} [prototype.disableUsedItems=false]
+	 * If true, items that are added will be disabled in the columns dropdown.
+	 *
+	 * @property {boolean} [prototype.useColConfig=true]
+	 * If true, pass colConfig for the item to the appropriate `Field` subclass.
+	 *
+	 * @property {boolean} [prototype.updateCanHide=true]
+	 * If true, automatically update colConfig to show (and prohibit hiding of) the column being added.
 	 */
 
 	var GridControl = makeSubclass('GridControl', Object, function (grid, colConfig, view, features, timing) {
@@ -21160,6 +22556,7 @@
 		self.fields = [];
 		self.controlFields = [];
 		self.controlFieldsByField = {};
+		self.controlFieldsById = {};
 
 		self.ui = {};
 
@@ -21168,7 +22565,9 @@
 		});
 	}, {
 		isHorizontal: false,
-		disableUsedItems: true,
+		isReorderable: true,
+		showColumns: true,
+		disableUsedItems: false,
 		useColConfig: true,
 		updateCanHide: true
 	});
@@ -21205,7 +22604,7 @@
 	 * @event GridControl#cleared
 	 */
 
-	mixinEventHandling(GridControl, 'GridControl', [
+	mixinEventHandling(GridControl, [
 			'fieldAdded'
 		, 'fieldRemoved'
 		, 'cleared'
@@ -21243,21 +22642,50 @@
 	 *
 	 * @param {string} field
 	 * Name of the field to add.
+	 *
+	 * @param {string} displayText
+	 *
+	 * @param {object} opts
+	 *
+	 * @param {object} controlFieldOpts
+	 *
+	 * @param {function} next
 	 */
 
-	GridControl.prototype.addField = function (field, displayText, opts, controlFieldOpts) {
-		var self = this;
+	GridControl.prototype.addField = function (field, displayText, opts, controlFieldOpts, next) {
+		var self = this
+			, args = Array.prototype.slice.call(arguments)
+			, fieldName;
 
-		opts = opts || {};
-
-		underscore.defaults(opts, {
+		opts = deepDefaults(opts, {
 			updateView: true,
 			silent: false,
 			openControls: false
 		});
 
-		if (field == null || field === '' || (self.disableUsedItems && self.fields.indexOf(field) >= 0)) {
-			return;
+		if (field == null || field === '') {
+			return typeof next === 'function' ? next(false) : undefined;
+		}
+
+		fieldName = typeof field === 'string' ? field : field.field;
+
+		if (fieldName == null || fieldName === '' || (self.disableUsedItems && self.fields.indexOf(fieldName) >= 0)) {
+			return typeof next === 'function' ? next(false) : undefined;
+		}
+
+		// Make sure we have access to typeinfo before continuing.  The typeinfo is used for:
+		//
+		//   1. Making sure aggregates are only applied to certain fields.
+		//   2. Showing group/pivot functions for applicable fields only.
+
+		if (self.typeInfo == null) {
+			return self.view.getTypeInfo(function (ok, typeInfo) {
+				if (!ok) {
+					return typeof next === 'function' ? next(false) : undefined;
+				}
+				self.typeInfo = typeInfo;
+				return GridControl.prototype.addField.apply(self, args);
+			});
 		}
 
 		if (opts.openControls) {
@@ -21267,25 +22695,27 @@
 		// Check to see if we are supposed to update the 'canHide' property of the column config.  Since
 		// we're adding the field, we mark it so that the field can't be hidden.
 
-		if (self.updateCanHide && self.colConfig != null && self.colConfig.isSet(field)) {
-			self.colConfig.get(field).isHidden = false;
-			self.colConfig.get(field).canHide = false;
+		if (self.updateCanHide && self.colConfig != null && self.colConfig.isSet(fieldName)) {
+			self.colConfig.get(fieldName).isHidden = false;
+			self.colConfig.get(fieldName).canHide = false;
 		}
 
-		var cf = new self.controlFieldCtor(self, field, displayText, self.useColConfig ? self.colConfig.get(field) : null, controlFieldOpts);
+		var cf = new self.controlFieldCtor(self, field, displayText, self.useColConfig ? self.colConfig.get(fieldName) : null, controlFieldOpts);
 
 		self.controlFields.push(cf);
+		self.controlFieldsById[cf.id] = cf;
 
-		if (self.controlFieldsByField[field] == null) {
-			self.controlFieldsByField[field] = [];
+		if (self.controlFieldsByField[fieldName] == null) {
+			self.controlFieldsByField[fieldName] = [];
 		}
-		self.controlFieldsByField[field].push(cf);
+		self.controlFieldsByField[fieldName].push(cf);
 
 		self.ui.clearBtn.show();
 
 		var li = jQuery('<li>')
 			.attr({
-				'data-wcdv-field': field,
+				'data-wcdv-field': fieldName,
+				'data-wcdv-control-field-id': cf.id,
 				'data-wcdv-draggable-origin': 'GRID_CONTROL_FIELD'
 			});
 
@@ -21298,25 +22728,22 @@
 
 		if (self.disableUsedItems) {
 			self.ui.dropdown.find('option').filter(function () {
-				return jQuery(this).val() === field;
+				return jQuery(this).val() === fieldName;
 			}).prop('disabled', true);
 		}
 
 		self.ui.dropdown.val('');
-
-		if (self.disableUsedItems) {
-			self.fields.push(field); // Add it to the fields array.
-		}
+		self.fields.push(fieldName); // Add it to the fields array.
 
 		if (typeof self.updateView === 'function' && opts.updateView) {
 			self.updateView();
 		}
 
 		if (!opts.silent) {
-			self.fire(GridControl.events.fieldAdded, null, field, self.fields);
+			self.fire('fieldAdded', null, fieldName, self.fields);
 		}
 
-		return cf;
+		return typeof next === 'function' ? next(true, cf) : undefined;
 	};
 
 	// #removeField {{{2
@@ -21330,13 +22757,13 @@
 
 	GridControl.prototype.removeField = function (cf) {
 		var self = this
-			, field = cf.field;
+			, fieldName = cf.field.field;
 
 		// Check to see if we are supposed to update the 'canHide' property of the column config.  Since
 		// we're removing the field, we mark it so that the field can be hidden.
 
-		if (self.updateCanHide && self.colConfig != null && self.colConfig.isSet(field)) {
-			self.colConfig.get(field).canHide = true;
+		if (self.updateCanHide && self.colConfig != null && self.colConfig.isSet(fieldName)) {
+			self.colConfig.get(fieldName).canHide = true;
 		}
 
 		// Remove it from the UI.
@@ -21347,15 +22774,16 @@
 		// Remove it from the internal data structures.
 
 		self.controlFields = underscore.without(self.controlFields, cf);
-		self.controlFieldsByField[field] = underscore.without(self.controlFieldsByField[field], cf);
+		self.controlFieldsById[cf.id] = undefined;
+		self.controlFieldsByField[fieldName] = underscore.without(self.controlFieldsByField[fieldName], cf);
 
 		// Re-enable the option in the dropdown, if necessary.
 
-		if (self.disableUsedItems) {
-			self.fields.splice(self.fields.indexOf(cf.field), 1);
+		self.fields.splice(self.fields.indexOf(fieldName), 1);
 
+		if (self.disableUsedItems) {
 			self.ui.dropdown.find('option').filter(function () {
-				return jQuery(this).val() === cf.field;
+				return jQuery(this).val() === fieldName;
 			}).prop('disabled', false);
 		}
 
@@ -21366,7 +22794,7 @@
 		}
 
 		self.updateView();
-		self.fire(GridControl.events.fieldRemoved, null, cf.field, self.fields);
+		self.fire(GridControl.events.fieldRemoved, null, fieldName, self.fields);
 	};
 
 	// #clear {{{2
@@ -21394,6 +22822,7 @@
 
 		self.fields = [];
 		self.controlFields = [];
+		self.controlFieldsById = {};
 		self.controlFieldsByField = {};
 		self.ui.fields.children().remove();
 		self.ui.dropdown.find('option:disabled').filter(function () {
@@ -21461,7 +22890,7 @@
 		var sync_colConfig = function (colConfig) {
 			debug.info('GRID (' + self.grid.id + ') // ' + self.controlType.toUpperCase() + ' CONTROL', 'Synchronizing column configuration with grid');
 			self.colConfig = colConfig;
-			if (self.disableUsedItems) {
+			if (self.showColumns) {
 				clearDropdown();
 				colConfig.each(function (fcc) {
 					jQuery('<option>', { 'value': fcc.field }).text(fcc.displayText || fcc.field).appendTo(self.ui.dropdown);
@@ -21584,7 +23013,6 @@
 			});
 		});
 	}, {
-		isHorizontal: true,
 		controlFieldCtor: GroupControlField,
 		controlType: 'Group'
 	});
@@ -21617,7 +23045,9 @@
 
 				if (ui.draggable.attr('data-wcdv-draggable-origin') === 'GRID_TABLE_HEADER') {
 					var field = ui.draggable.attr('data-wcdv-field');
-					self.addField(field, getProp(self.colConfig.get(field), 'displayText'));
+					self.addField(field, getProp(self.colConfig.get(field), 'displayText'), {
+						autoShowFunWin: true
+					});
 				}
 			}
 		})
@@ -21632,13 +23062,16 @@
 			.appendTo(self.ui.title);
 		self.ui.clearBtn = self.makeClearButton(self.ui.title);
 		self.ui.fields = jQuery('<ul>', {
-			id: gensym()
+			id: gensym(),
+			'class': self.isHorizontal ? 'wcdv_control_horizontal' : 'wcdv_control_vertical'
 		}).appendTo(self.ui.root);
 
 		var dropdownContainer = jQuery('<div>').appendTo(self.ui.root);
-		self.ui.dropdown = jQuery('<select>').appendTo(dropdownContainer);
+		self.ui.dropdown = jQuery('<select>', { 'class': 'wcdv_control_addField' }).appendTo(dropdownContainer);
 		self.ui.dropdown.on('change', function () {
-			self.addField(self.ui.dropdown.val(), self.ui.dropdown.find('option:selected').text());
+			self.addField(self.ui.dropdown.val(), self.ui.dropdown.find('option:selected').text(), {
+				autoShowFunWin: true
+			});
 		});
 
 		self.addViewConfigChangeHandler('groupSet', function () {
@@ -21659,15 +23092,12 @@
 
 	GroupControl.prototype.updateView = function () {
 		var self = this;
+		var fieldNames = underscore.map(self.controlFields, function (cf) {
+			return cf.getSpec();
+		});
 
-		var fields = self.ui.fields.children('li').map(function (index, elt) {
-			return jQuery(elt).attr('data-wcdv-field');
-		}).get();
-
-		debug.info('GRID // GROUP CONTROL', 'Setting group fields to: %O', fields);
-
-		if (fields.length > 0) {
-			self.view.setGroup({fieldNames: fields}, {
+		if (fieldNames.length > 0) {
+			self.view.setGroup({fieldNames: fieldNames}, {
 				dontSendEventTo: self
 			});
 		}
@@ -21682,6 +23112,48 @@
 		var self = this;
 
 		return self.grid.id + ', Group';
+	};
+
+	// #sortableSync {{{2
+
+	GroupControl.prototype.sortableSync = function () {
+		var self = this;
+
+		var controlFieldIds = self.ui.fields.children('li').map(function (index, elt) {
+			return jQuery(elt).attr('data-wcdv-control-field-id');
+		}).get();
+
+		self.controlFields = [];
+		underscore.each(controlFieldIds, function (id) {
+			self.controlFields.push(self.controlFieldsById[id]);
+		});
+
+		return self.updateView();
+	};
+
+	// #addField {{{2
+
+	GroupControl.prototype.addField = function (field, displayText, opts) {
+		var self = this;
+
+		opts = deepDefaults(opts, {
+			autoShowFunWin: false,
+			updateView: true
+		});
+		var updateView = opts.updateView;
+		opts.updateView = false;
+
+		self.super.addField(field, displayText, opts, null, function (ok, cf) {
+			if (!ok) {
+				return;
+			}
+			if (opts.autoShowFunWin && cf.fti != null && ['date', 'datetime'].indexOf(cf.fti.type) >= 0 && cf.field.fun === undefined) {
+				cf.showFunWin();
+			}
+			else if (updateView) {
+				self.updateView();
+			}
+		});
 	};
 
 	// PivotControl {{{1
@@ -21714,7 +23186,6 @@
 			});
 		});
 	}, {
-		isHorizontal: true,
 		controlFieldCtor: PivotControlField,
 		controlType: 'Pivot'
 	});
@@ -21747,7 +23218,9 @@
 
 				if (ui.draggable.attr('data-wcdv-draggable-origin') === 'GRID_TABLE_HEADER') {
 					var field = ui.draggable.attr('data-wcdv-field');
-					self.addField(field, getProp(self.colConfig.get(field), 'displayText'));
+					self.addField(field, getProp(self.colConfig.get(field), 'displayText'), {
+						autoShowFunWin: true
+					});
 				}
 			}
 		})
@@ -21763,13 +23236,16 @@
 			.appendTo(self.ui.title);
 		self.ui.clearBtn = self.makeClearButton(self.ui.title);
 		self.ui.fields = jQuery('<ul>', {
-			id: gensym()
+			id: gensym(),
+			'class': self.isHorizontal ? 'wcdv_control_horizontal' : 'wcdv_control_vertical'
 		}).appendTo(self.ui.root);
 
 		var dropdownContainer = jQuery('<div>').appendTo(self.ui.root);
-		self.ui.dropdown = jQuery('<select>').appendTo(dropdownContainer);
+		self.ui.dropdown = jQuery('<select>', { 'class': 'wcdv_control_addField' }).appendTo(dropdownContainer);
 		self.ui.dropdown.on('change', function () {
-			self.addField(self.ui.dropdown.val(), self.ui.dropdown.find('option:selected').text());
+			self.addField(self.ui.dropdown.val(), self.ui.dropdown.find('option:selected').text(), {
+				autoShowFunWin: true
+			});
 		});
 
 		self.addViewConfigChangeHandler('pivotSet', function (spec) {
@@ -21796,15 +23272,12 @@
 
 	PivotControl.prototype.updateView = function () {
 		var self = this;
+		var fieldNames = underscore.map(self.controlFields, function (cf) {
+			return cf.getSpec();
+		});
 
-		var fields = self.ui.fields.children('li').map(function (index, elt) {
-			return jQuery(elt).attr('data-wcdv-field');
-		}).get();
-
-		debug.info('GRID // PIVOT CONTROL', 'Setting pivot fields to: %O', fields);
-
-		if (fields.length > 0) {
-			self.view.setPivot({fieldNames: fields}, {
+		if (fieldNames.length > 0) {
+			self.view.setPivot({fieldNames: fieldNames}, {
 				dontSendEventTo: self
 			});
 		}
@@ -21819,6 +23292,48 @@
 		var self = this;
 
 		return self.grid.id + ', Pivot';
+	};
+
+	// #sortableSync {{{2
+
+	PivotControl.prototype.sortableSync = function () {
+		var self = this;
+
+		var controlFieldIds = self.ui.fields.children('li').map(function (index, elt) {
+			return jQuery(elt).attr('data-wcdv-control-field-id');
+		}).get();
+
+		self.controlFields = [];
+		underscore.each(controlFieldIds, function (id) {
+			self.controlFields.push(self.controlFieldsById[id]);
+		});
+
+		return self.updateView();
+	};
+
+	// #addField {{{2
+
+	PivotControl.prototype.addField = function (field, displayText, opts) {
+		var self = this;
+
+		opts = deepDefaults(opts, {
+			autoShowFunWin: false,
+			updateView: true
+		});
+		var updateView = opts.updateView;
+		opts.updateView = false;
+
+		self.super.addField(field, displayText, opts, null, function (ok, cf) {
+			if (!ok) {
+				return;
+			}
+			if (opts.autoShowFunWin && cf.fti != null && ['date', 'datetime'].indexOf(cf.fti.type) >= 0 && cf.field.fun === undefined) {
+				cf.showFunWin();
+			}
+			else if (updateView) {
+				self.updateView();
+			}
+		});
 	};
 
 	// AggregateControl {{{1
@@ -21846,6 +23361,7 @@
 		});
 	}, {
 		disableUsedItems: false,
+		showColumns: false,
 		updateCanHide: false,
 		controlFieldCtor: AggregateControlField,
 		controlType: 'Aggregate'
@@ -21873,9 +23389,12 @@
 			.text('Aggregate')
 			.appendTo(self.ui.title);
 		self.ui.clearBtn = self.makeClearButton(self.ui.title);
-		self.ui.fields = jQuery('<ul>').appendTo(self.ui.root);
+		self.ui.fields = jQuery('<ul>', {
+			id: gensym(),
+			'class': self.isHorizontal ? 'wcdv_control_horizontal' : 'wcdv_control_vertical'
+		}).appendTo(self.ui.root);
 		var dropdownContainer = jQuery('<div>').appendTo(self.ui.root);
-		self.ui.dropdown = jQuery('<select>').appendTo(dropdownContainer);
+		self.ui.dropdown = jQuery('<select>', { 'class': 'wcdv_control_addField' }).appendTo(dropdownContainer);
 		self.ui.dropdown.on('change', function () {
 			self.addField(self.ui.dropdown.val(), self.ui.dropdown.find('option:selected').text());
 		});
@@ -22087,25 +23606,6 @@
 		});
 	};
 
-	// #addField {{{2
-
-	AggregateControl.prototype.addField = function () {
-		var self = this;
-		var args = Array.prototype.slice.call(arguments);
-
-		if (self.typeInfo == null) {
-			return self.view.getTypeInfo(function (ok, typeInfo) {
-				if (!ok) {
-					return;
-				}
-				self.typeInfo = typeInfo;
-				return self.addField.apply(self, args);
-			});
-		}
-
-		self.super.addField.apply(self, args);
-	};
-
 	// #toString {{{2
 
 	AggregateControl.prototype.toString = function () {
@@ -22137,10 +23637,11 @@
 		var self = this;
 
 		self.super.ctor.apply(self, arguments);
-		self.gfs = new GridFilterSet$1(self.view, null, null, null, {
+		self.gfs = new GridFilterSet(self.view, null, null, null, {
 			dontSendEventTo: self
 		});
 	}, {
+		isReorderable: false,
 		controlFieldCtor: FilterControlField,
 		controlType: 'Filter'
 	});
@@ -22157,10 +23658,12 @@
 	FilterControl.prototype.draw = function (parent) {
 		var self = this;
 
+		/*
 		parent.resizable({
 			handles: 'e',
 			minWidth: 100
 		});
+		*/
 
 		parent.droppable({
 			classes: {
@@ -22184,10 +23687,13 @@
 			.text('Filters')
 			.appendTo(self.ui.title);
 		self.ui.clearBtn = self.makeClearButton(self.ui.title);
-		self.ui.fields = jQuery('<ul>').appendTo(self.ui.root);
+		self.ui.fields = jQuery('<ul>', {
+			id: gensym(),
+			'class': self.isHorizontal ? 'wcdv_control_horizontal' : 'wcdv_control_vertical'
+		}).appendTo(self.ui.root);
 
 		var dropdownContainer = jQuery('<div>').appendTo(self.ui.root);
-		self.ui.dropdown = jQuery('<select>').appendTo(dropdownContainer);
+		self.ui.dropdown = jQuery('<select>', { 'class': 'wcdv_control_addField' }).appendTo(dropdownContainer);
 		self.ui.dropdown.on('change', function () {
 			self.addField(self.ui.dropdown.val(), self.ui.dropdown.find('option:selected').text());
 		});
@@ -22218,7 +23724,7 @@
 	FilterControl.prototype.removeField = function (cf) {
 		var self = this;
 
-		self.gfs.removeField(cf.field);
+		self.gfs.removeField(cf.field.field);
 		self.super.removeField(cf);
 	};
 
@@ -22256,6 +23762,7 @@
 	exports.createFrame = createFrame;
 	exports.blockParams = blockParams;
 	exports.appendContextPath = appendContextPath;
+
 	var escape = {
 	  '&': '&amp;',
 	  '<': '&lt;',
@@ -22387,15 +23894,20 @@
 
 	exports.__esModule = true;
 
-	var errorProps = ['description', 'fileName', 'lineNumber', 'message', 'name', 'number', 'stack'];
+	var errorProps = ['description', 'fileName', 'lineNumber', 'endLineNumber', 'message', 'name', 'number', 'stack'];
 
 	function Exception(message, node) {
 	  var loc = node && node.loc,
 	      line = undefined,
-	      column = undefined;
+	      endLineNumber = undefined,
+	      column = undefined,
+	      endColumn = undefined;
+
 	  if (loc) {
 	    line = loc.start.line;
+	    endLineNumber = loc.end.line;
 	    column = loc.start.column;
+	    endColumn = loc.end.column;
 
 	    message += ' - ' + line + ':' + column;
 	  }
@@ -22415,6 +23927,7 @@
 	  try {
 	    if (loc) {
 	      this.lineNumber = line;
+	      this.endLineNumber = endLineNumber;
 
 	      // Work around issue under safari where we can't directly set the column value
 	      /* istanbul ignore next */
@@ -22423,8 +23936,13 @@
 	          value: column,
 	          enumerable: true
 	        });
+	        Object.defineProperty(this, 'endColumn', {
+	          value: endColumn,
+	          enumerable: true
+	        });
 	      } else {
 	        this.column = column;
+	        this.endColumn = endColumn;
 	      }
 	    }
 	  } catch (nop) {
@@ -22547,6 +24065,16 @@
 	            execIteration(i, i, i === context.length - 1);
 	          }
 	        }
+	      } else if (commonjsGlobal.Symbol && context[commonjsGlobal.Symbol.iterator]) {
+	        var newContext = [];
+	        var iterator = context[commonjsGlobal.Symbol.iterator]();
+	        for (var it = iterator.next(); !it.done; it = iterator.next()) {
+	          newContext.push(it.value);
+	        }
+	        context = newContext;
+	        for (var j = context.length; i < j; i++) {
+	          execIteration(i, i, i === context.length - 1);
+	        }
 	      } else {
 	        var priorKey = undefined;
 
@@ -22614,11 +24142,21 @@
 	var _if = createCommonjsModule(function (module, exports) {
 
 	exports.__esModule = true;
+	// istanbul ignore next
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 
+
+
+
+	var _exception2 = _interopRequireDefault(exception);
 
 	exports['default'] = function (instance) {
 	  instance.registerHelper('if', function (conditional, options) {
+	    if (arguments.length != 2) {
+	      throw new _exception2['default']('#if requires exactly one argument');
+	    }
 	    if (utils.isFunction(conditional)) {
 	      conditional = conditional.call(this);
 	    }
@@ -22634,6 +24172,9 @@
 	  });
 
 	  instance.registerHelper('unless', function (conditional, options) {
+	    if (arguments.length != 2) {
+	      throw new _exception2['default']('#unless requires exactly one argument');
+	    }
 	    return instance.helpers['if'].call(this, conditional, { fn: options.inverse, inverse: options.fn, hash: options.hash });
 	  });
 	};
@@ -22680,7 +24221,13 @@
 
 	exports['default'] = function (instance) {
 	  instance.registerHelper('lookup', function (obj, field) {
-	    return obj && obj[field];
+	    if (!obj) {
+	      return obj;
+	    }
+	    if (field === 'constructor' && !obj.propertyIsEnumerable(field)) {
+	      return undefined;
+	    }
+	    return obj[field];
 	  });
 	};
 
@@ -22693,11 +24240,21 @@
 	var _with = createCommonjsModule(function (module, exports) {
 
 	exports.__esModule = true;
+	// istanbul ignore next
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 
+
+
+
+	var _exception2 = _interopRequireDefault(exception);
 
 	exports['default'] = function (instance) {
 	  instance.registerHelper('with', function (context, options) {
+	    if (arguments.length != 2) {
+	      throw new _exception2['default']('#with requires exactly one argument');
+	    }
 	    if (utils.isFunction(context)) {
 	      context = context.call(this);
 	    }
@@ -22731,6 +24288,7 @@
 
 	exports.__esModule = true;
 	exports.registerDefaultHelpers = registerDefaultHelpers;
+	exports.moveHelperToHooks = moveHelperToHooks;
 	// istanbul ignore next
 
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
@@ -22773,10 +24331,20 @@
 	  _helpersWith2['default'](instance);
 	}
 
+	function moveHelperToHooks(instance, helperName, keepHelper) {
+	  if (instance.helpers[helperName]) {
+	    instance.hooks[helperName] = instance.helpers[helperName];
+	    if (!keepHelper) {
+	      delete instance.helpers[helperName];
+	    }
+	  }
+	}
+
 	});
 
 	unwrapExports(helpers);
 	var helpers_1 = helpers.registerDefaultHelpers;
+	var helpers_2 = helpers.moveHelperToHooks;
 
 	var inline = createCommonjsModule(function (module, exports) {
 
@@ -22905,11 +24473,13 @@
 
 	var _logger2 = _interopRequireDefault(logger_1);
 
-	var VERSION = '4.0.12';
+	var VERSION = '4.5.1';
 	exports.VERSION = VERSION;
-	var COMPILER_REVISION = 7;
-
+	var COMPILER_REVISION = 8;
 	exports.COMPILER_REVISION = COMPILER_REVISION;
+	var LAST_COMPATIBLE_COMPILER_REVISION = 7;
+
+	exports.LAST_COMPATIBLE_COMPILER_REVISION = LAST_COMPATIBLE_COMPILER_REVISION;
 	var REVISION_CHANGES = {
 	  1: '<= 1.0.rc.2', // 1.0.rc.2 is actually rev2 but doesn't report it
 	  2: '== 1.0.0-rc.3',
@@ -22917,16 +24487,17 @@
 	  4: '== 1.x.x',
 	  5: '== 2.0.0-alpha.x',
 	  6: '>= 2.0.0-beta.1',
-	  7: '>= 4.0.0'
+	  7: '>= 4.0.0 <4.3.0',
+	  8: '>= 4.3.0'
 	};
 
 	exports.REVISION_CHANGES = REVISION_CHANGES;
 	var objectType = '[object Object]';
 
-	function HandlebarsEnvironment(helpers$$1, partials, decorators$$1) {
-	  this.helpers = helpers$$1 || {};
+	function HandlebarsEnvironment(helpers$1, partials, decorators$1) {
+	  this.helpers = helpers$1 || {};
 	  this.partials = partials || {};
-	  this.decorators = decorators$$1 || {};
+	  this.decorators = decorators$1 || {};
 
 	  helpers.registerDefaultHelpers(this);
 	  decorators.registerDefaultDecorators(this);
@@ -22993,10 +24564,11 @@
 	var base_1 = base.HandlebarsEnvironment;
 	var base_2 = base.VERSION;
 	var base_3 = base.COMPILER_REVISION;
-	var base_4 = base.REVISION_CHANGES;
-	var base_5 = base.log;
-	var base_6 = base.createFrame;
-	var base_7 = base.logger;
+	var base_4 = base.LAST_COMPATIBLE_COMPILER_REVISION;
+	var base_5 = base.REVISION_CHANGES;
+	var base_6 = base.log;
+	var base_7 = base.createFrame;
+	var base_8 = base.logger;
 
 	var safeString = createCommonjsModule(function (module, exports) {
 
@@ -23043,23 +24615,28 @@
 
 
 
+
+
 	function checkRevision(compilerInfo) {
 	  var compilerRevision = compilerInfo && compilerInfo[0] || 1,
 	      currentRevision = base.COMPILER_REVISION;
 
-	  if (compilerRevision !== currentRevision) {
-	    if (compilerRevision < currentRevision) {
-	      var runtimeVersions = base.REVISION_CHANGES[currentRevision],
-	          compilerVersions = base.REVISION_CHANGES[compilerRevision];
-	      throw new _exception2['default']('Template was precompiled with an older version of Handlebars than the current runtime. ' + 'Please update your precompiler to a newer version (' + runtimeVersions + ') or downgrade your runtime to an older version (' + compilerVersions + ').');
-	    } else {
-	      // Use the embedded version info since the runtime doesn't know about this revision yet
-	      throw new _exception2['default']('Template was precompiled with a newer version of Handlebars than the current runtime. ' + 'Please update your runtime to a newer version (' + compilerInfo[1] + ').');
-	    }
+	  if (compilerRevision >= base.LAST_COMPATIBLE_COMPILER_REVISION && compilerRevision <= base.COMPILER_REVISION) {
+	    return;
+	  }
+
+	  if (compilerRevision < base.LAST_COMPATIBLE_COMPILER_REVISION) {
+	    var runtimeVersions = base.REVISION_CHANGES[currentRevision],
+	        compilerVersions = base.REVISION_CHANGES[compilerRevision];
+	    throw new _exception2['default']('Template was precompiled with an older version of Handlebars than the current runtime. ' + 'Please update your precompiler to a newer version (' + runtimeVersions + ') or downgrade your runtime to an older version (' + compilerVersions + ').');
+	  } else {
+	    // Use the embedded version info since the runtime doesn't know about this revision yet
+	    throw new _exception2['default']('Template was precompiled with a newer version of Handlebars than the current runtime. ' + 'Please update your runtime to a newer version (' + compilerInfo[1] + ').');
 	  }
 	}
 
 	function template(templateSpec, env) {
+
 	  /* istanbul ignore next */
 	  if (!env) {
 	    throw new _exception2['default']('No environment passed to template');
@@ -23071,8 +24648,11 @@
 	  templateSpec.main.decorator = templateSpec.main_d;
 
 	  // Note: Using env.VM references rather than local var references throughout this section to allow
-	  // for external users to override these as psuedo-supported APIs.
+	  // for external users to override these as pseudo-supported APIs.
 	  env.VM.checkRevision(templateSpec.compiler);
+
+	  // backwards compatibility for precompiled templates with compiler-version 7 (<4.3.0)
+	  var templateWasPrecompiledWithCompilerV7 = templateSpec.compiler && templateSpec.compiler[0] === 7;
 
 	  function invokePartialWrapper(partial, context, options) {
 	    if (options.hash) {
@@ -23081,13 +24661,15 @@
 	        options.ids[0] = true;
 	      }
 	    }
-
 	    partial = env.VM.resolvePartial.call(this, partial, context, options);
-	    var result = env.VM.invokePartial.call(this, partial, context, options);
+
+	    var optionsWithHooks = Utils.extend({}, options, { hooks: this.hooks });
+
+	    var result = env.VM.invokePartial.call(this, partial, context, optionsWithHooks);
 
 	    if (result == null && env.compile) {
 	      options.partials[options.name] = env.compile(partial, templateSpec.compilerOptions, env);
-	      result = options.partials[options.name](context, options);
+	      result = options.partials[options.name](context, optionsWithHooks);
 	    }
 	    if (result != null) {
 	      if (options.indent) {
@@ -23109,9 +24691,9 @@
 
 	  // Just add water
 	  var container = {
-	    strict: function strict(obj, name) {
-	      if (!(name in obj)) {
-	        throw new _exception2['default']('"' + name + '" not defined in ' + obj);
+	    strict: function strict(obj, name, loc) {
+	      if (!obj || !(name in obj)) {
+	        throw new _exception2['default']('"' + name + '" not defined in ' + obj, { loc: loc });
 	      }
 	      return obj[name];
 	    },
@@ -23154,15 +24736,6 @@
 	      }
 	      return value;
 	    },
-	    merge: function merge(param, common) {
-	      var obj = param || common;
-
-	      if (param && common && param !== common) {
-	        obj = Utils.extend({}, common, param);
-	      }
-
-	      return obj;
-	    },
 	    // An empty object to use as replacement for null-contexts
 	    nullContext: Object.seal({}),
 
@@ -23199,18 +24772,25 @@
 
 	  ret._setup = function (options) {
 	    if (!options.partial) {
-	      container.helpers = container.merge(options.helpers, env.helpers);
+	      container.helpers = Utils.extend({}, env.helpers, options.helpers);
 
 	      if (templateSpec.usePartial) {
-	        container.partials = container.merge(options.partials, env.partials);
+	        container.partials = Utils.extend({}, env.partials, options.partials);
 	      }
 	      if (templateSpec.usePartial || templateSpec.useDecorators) {
-	        container.decorators = container.merge(options.decorators, env.decorators);
+	        container.decorators = Utils.extend({}, env.decorators, options.decorators);
 	      }
+
+	      container.hooks = {};
+
+	      var keepHelperInHelpers = options.allowCallsToHelperMissing || templateWasPrecompiledWithCompilerV7;
+	      helpers.moveHelperToHooks(container, 'helperMissing', keepHelperInHelpers);
+	      helpers.moveHelperToHooks(container, 'blockHelperMissing', keepHelperInHelpers);
 	    } else {
 	      container.helpers = options.helpers;
 	      container.partials = options.partials;
 	      container.decorators = options.decorators;
+	      container.hooks = options.hooks;
 	    }
 	  };
 
@@ -23246,6 +24826,10 @@
 	  prog.blockParams = declaredBlockParams || 0;
 	  return prog;
 	}
+
+	/**
+	 * This is currently part of the official API, therefore implementation details should not be changed.
+	 */
 
 	function resolvePartial(partial, context, options) {
 	  if (!partial) {
@@ -23369,7 +24953,7 @@
 
 
 
-	var base$$1 = _interopRequireWildcard(base);
+	var base$1 = _interopRequireWildcard(base);
 
 	// Each of these augment the Handlebars object. No need to setup here.
 	// (This is done to easily share code between commonjs and browse envs)
@@ -23388,7 +24972,7 @@
 
 
 
-	var runtime$$1 = _interopRequireWildcard(runtime);
+	var runtime$1 = _interopRequireWildcard(runtime);
 
 
 
@@ -23396,17 +24980,17 @@
 
 	// For compatibility and usage outside of module systems, make the Handlebars object a namespace
 	function create() {
-	  var hb = new base$$1.HandlebarsEnvironment();
+	  var hb = new base$1.HandlebarsEnvironment();
 
-	  Utils.extend(hb, base$$1);
+	  Utils.extend(hb, base$1);
 	  hb.SafeString = _handlebarsSafeString2['default'];
 	  hb.Exception = _handlebarsException2['default'];
 	  hb.Utils = Utils;
 	  hb.escapeExpression = Utils.escapeExpression;
 
-	  hb.VM = runtime$$1;
+	  hb.VM = runtime$1;
 	  hb.template = function (spec) {
-	    return runtime$$1.template(spec, hb);
+	    return runtime$1.template(spec, hb);
 	  };
 
 	  return hb;
@@ -23467,11 +25051,10 @@
 	var handlebars = (function () {
 	    var parser = { trace: function trace() {},
 	        yy: {},
-	        symbols_: { "error": 2, "root": 3, "program": 4, "EOF": 5, "program_repetition0": 6, "statement": 7, "mustache": 8, "block": 9, "rawBlock": 10, "partial": 11, "partialBlock": 12, "content": 13, "COMMENT": 14, "CONTENT": 15, "openRawBlock": 16, "rawBlock_repetition_plus0": 17, "END_RAW_BLOCK": 18, "OPEN_RAW_BLOCK": 19, "helperName": 20, "openRawBlock_repetition0": 21, "openRawBlock_option0": 22, "CLOSE_RAW_BLOCK": 23, "openBlock": 24, "block_option0": 25, "closeBlock": 26, "openInverse": 27, "block_option1": 28, "OPEN_BLOCK": 29, "openBlock_repetition0": 30, "openBlock_option0": 31, "openBlock_option1": 32, "CLOSE": 33, "OPEN_INVERSE": 34, "openInverse_repetition0": 35, "openInverse_option0": 36, "openInverse_option1": 37, "openInverseChain": 38, "OPEN_INVERSE_CHAIN": 39, "openInverseChain_repetition0": 40, "openInverseChain_option0": 41, "openInverseChain_option1": 42, "inverseAndProgram": 43, "INVERSE": 44, "inverseChain": 45, "inverseChain_option0": 46, "OPEN_ENDBLOCK": 47, "OPEN": 48, "mustache_repetition0": 49, "mustache_option0": 50, "OPEN_UNESCAPED": 51, "mustache_repetition1": 52, "mustache_option1": 53, "CLOSE_UNESCAPED": 54, "OPEN_PARTIAL": 55, "partialName": 56, "partial_repetition0": 57, "partial_option0": 58, "openPartialBlock": 59, "OPEN_PARTIAL_BLOCK": 60, "openPartialBlock_repetition0": 61, "openPartialBlock_option0": 62, "param": 63, "sexpr": 64, "OPEN_SEXPR": 65, "sexpr_repetition0": 66, "sexpr_option0": 67, "CLOSE_SEXPR": 68, "hash": 69, "hash_repetition_plus0": 70, "hashSegment": 71, "ID": 72, "EQUALS": 73, "blockParams": 74, "OPEN_BLOCK_PARAMS": 75, "blockParams_repetition_plus0": 76, "CLOSE_BLOCK_PARAMS": 77, "path": 78, "dataName": 79, "STRING": 80, "NUMBER": 81, "BOOLEAN": 82, "UNDEFINED": 83, "NULL": 84, "DATA": 85, "pathSegments": 86, "SEP": 87, "$accept": 0, "$end": 1 },
+	        symbols_: { "error": 2, "root": 3, "program": 4, "EOF": 5, "program_repetition0": 6, "statement": 7, "mustache": 8, "block": 9, "rawBlock": 10, "partial": 11, "partialBlock": 12, "content": 13, "COMMENT": 14, "CONTENT": 15, "openRawBlock": 16, "rawBlock_repetition0": 17, "END_RAW_BLOCK": 18, "OPEN_RAW_BLOCK": 19, "helperName": 20, "openRawBlock_repetition0": 21, "openRawBlock_option0": 22, "CLOSE_RAW_BLOCK": 23, "openBlock": 24, "block_option0": 25, "closeBlock": 26, "openInverse": 27, "block_option1": 28, "OPEN_BLOCK": 29, "openBlock_repetition0": 30, "openBlock_option0": 31, "openBlock_option1": 32, "CLOSE": 33, "OPEN_INVERSE": 34, "openInverse_repetition0": 35, "openInverse_option0": 36, "openInverse_option1": 37, "openInverseChain": 38, "OPEN_INVERSE_CHAIN": 39, "openInverseChain_repetition0": 40, "openInverseChain_option0": 41, "openInverseChain_option1": 42, "inverseAndProgram": 43, "INVERSE": 44, "inverseChain": 45, "inverseChain_option0": 46, "OPEN_ENDBLOCK": 47, "OPEN": 48, "mustache_repetition0": 49, "mustache_option0": 50, "OPEN_UNESCAPED": 51, "mustache_repetition1": 52, "mustache_option1": 53, "CLOSE_UNESCAPED": 54, "OPEN_PARTIAL": 55, "partialName": 56, "partial_repetition0": 57, "partial_option0": 58, "openPartialBlock": 59, "OPEN_PARTIAL_BLOCK": 60, "openPartialBlock_repetition0": 61, "openPartialBlock_option0": 62, "param": 63, "sexpr": 64, "OPEN_SEXPR": 65, "sexpr_repetition0": 66, "sexpr_option0": 67, "CLOSE_SEXPR": 68, "hash": 69, "hash_repetition_plus0": 70, "hashSegment": 71, "ID": 72, "EQUALS": 73, "blockParams": 74, "OPEN_BLOCK_PARAMS": 75, "blockParams_repetition_plus0": 76, "CLOSE_BLOCK_PARAMS": 77, "path": 78, "dataName": 79, "STRING": 80, "NUMBER": 81, "BOOLEAN": 82, "UNDEFINED": 83, "NULL": 84, "DATA": 85, "pathSegments": 86, "SEP": 87, "$accept": 0, "$end": 1 },
 	        terminals_: { 2: "error", 5: "EOF", 14: "COMMENT", 15: "CONTENT", 18: "END_RAW_BLOCK", 19: "OPEN_RAW_BLOCK", 23: "CLOSE_RAW_BLOCK", 29: "OPEN_BLOCK", 33: "CLOSE", 34: "OPEN_INVERSE", 39: "OPEN_INVERSE_CHAIN", 44: "INVERSE", 47: "OPEN_ENDBLOCK", 48: "OPEN", 51: "OPEN_UNESCAPED", 54: "CLOSE_UNESCAPED", 55: "OPEN_PARTIAL", 60: "OPEN_PARTIAL_BLOCK", 65: "OPEN_SEXPR", 68: "CLOSE_SEXPR", 72: "ID", 73: "EQUALS", 75: "OPEN_BLOCK_PARAMS", 77: "CLOSE_BLOCK_PARAMS", 80: "STRING", 81: "NUMBER", 82: "BOOLEAN", 83: "UNDEFINED", 84: "NULL", 85: "DATA", 87: "SEP" },
-	        productions_: [0, [3, 2], [4, 1], [7, 1], [7, 1], [7, 1], [7, 1], [7, 1], [7, 1], [7, 1], [13, 1], [10, 3], [16, 5], [9, 4], [9, 4], [24, 6], [27, 6], [38, 6], [43, 2], [45, 3], [45, 1], [26, 3], [8, 5], [8, 5], [11, 5], [12, 3], [59, 5], [63, 1], [63, 1], [64, 5], [69, 1], [71, 3], [74, 3], [20, 1], [20, 1], [20, 1], [20, 1], [20, 1], [20, 1], [20, 1], [56, 1], [56, 1], [79, 2], [78, 1], [86, 3], [86, 1], [6, 0], [6, 2], [17, 1], [17, 2], [21, 0], [21, 2], [22, 0], [22, 1], [25, 0], [25, 1], [28, 0], [28, 1], [30, 0], [30, 2], [31, 0], [31, 1], [32, 0], [32, 1], [35, 0], [35, 2], [36, 0], [36, 1], [37, 0], [37, 1], [40, 0], [40, 2], [41, 0], [41, 1], [42, 0], [42, 1], [46, 0], [46, 1], [49, 0], [49, 2], [50, 0], [50, 1], [52, 0], [52, 2], [53, 0], [53, 1], [57, 0], [57, 2], [58, 0], [58, 1], [61, 0], [61, 2], [62, 0], [62, 1], [66, 0], [66, 2], [67, 0], [67, 1], [70, 1], [70, 2], [76, 1], [76, 2]],
-	        performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate, $$, _$
-	        /*``*/) {
+	        productions_: [0, [3, 2], [4, 1], [7, 1], [7, 1], [7, 1], [7, 1], [7, 1], [7, 1], [7, 1], [13, 1], [10, 3], [16, 5], [9, 4], [9, 4], [24, 6], [27, 6], [38, 6], [43, 2], [45, 3], [45, 1], [26, 3], [8, 5], [8, 5], [11, 5], [12, 3], [59, 5], [63, 1], [63, 1], [64, 5], [69, 1], [71, 3], [74, 3], [20, 1], [20, 1], [20, 1], [20, 1], [20, 1], [20, 1], [20, 1], [56, 1], [56, 1], [79, 2], [78, 1], [86, 3], [86, 1], [6, 0], [6, 2], [17, 0], [17, 2], [21, 0], [21, 2], [22, 0], [22, 1], [25, 0], [25, 1], [28, 0], [28, 1], [30, 0], [30, 2], [31, 0], [31, 1], [32, 0], [32, 1], [35, 0], [35, 2], [36, 0], [36, 1], [37, 0], [37, 1], [40, 0], [40, 2], [41, 0], [41, 1], [42, 0], [42, 1], [46, 0], [46, 1], [49, 0], [49, 2], [50, 0], [50, 1], [52, 0], [52, 2], [53, 0], [53, 1], [57, 0], [57, 2], [58, 0], [58, 1], [61, 0], [61, 2], [62, 0], [62, 1], [66, 0], [66, 2], [67, 0], [67, 1], [70, 1], [70, 2], [76, 1], [76, 2]],
+	        performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate, $$, _$) {
 
 	            var $0 = $$.length - 1;
 	            switch (yystate) {
@@ -23650,7 +25233,7 @@
 	                    $$[$0 - 1].push($$[$0]);
 	                    break;
 	                case 48:
-	                    this.$ = [$$[$0]];
+	                    this.$ = [];
 	                    break;
 	                case 49:
 	                    $$[$0 - 1].push($$[$0]);
@@ -23723,8 +25306,8 @@
 	                    break;
 	            }
 	        },
-	        table: [{ 3: 1, 4: 2, 5: [2, 46], 6: 3, 14: [2, 46], 15: [2, 46], 19: [2, 46], 29: [2, 46], 34: [2, 46], 48: [2, 46], 51: [2, 46], 55: [2, 46], 60: [2, 46] }, { 1: [3] }, { 5: [1, 4] }, { 5: [2, 2], 7: 5, 8: 6, 9: 7, 10: 8, 11: 9, 12: 10, 13: 11, 14: [1, 12], 15: [1, 20], 16: 17, 19: [1, 23], 24: 15, 27: 16, 29: [1, 21], 34: [1, 22], 39: [2, 2], 44: [2, 2], 47: [2, 2], 48: [1, 13], 51: [1, 14], 55: [1, 18], 59: 19, 60: [1, 24] }, { 1: [2, 1] }, { 5: [2, 47], 14: [2, 47], 15: [2, 47], 19: [2, 47], 29: [2, 47], 34: [2, 47], 39: [2, 47], 44: [2, 47], 47: [2, 47], 48: [2, 47], 51: [2, 47], 55: [2, 47], 60: [2, 47] }, { 5: [2, 3], 14: [2, 3], 15: [2, 3], 19: [2, 3], 29: [2, 3], 34: [2, 3], 39: [2, 3], 44: [2, 3], 47: [2, 3], 48: [2, 3], 51: [2, 3], 55: [2, 3], 60: [2, 3] }, { 5: [2, 4], 14: [2, 4], 15: [2, 4], 19: [2, 4], 29: [2, 4], 34: [2, 4], 39: [2, 4], 44: [2, 4], 47: [2, 4], 48: [2, 4], 51: [2, 4], 55: [2, 4], 60: [2, 4] }, { 5: [2, 5], 14: [2, 5], 15: [2, 5], 19: [2, 5], 29: [2, 5], 34: [2, 5], 39: [2, 5], 44: [2, 5], 47: [2, 5], 48: [2, 5], 51: [2, 5], 55: [2, 5], 60: [2, 5] }, { 5: [2, 6], 14: [2, 6], 15: [2, 6], 19: [2, 6], 29: [2, 6], 34: [2, 6], 39: [2, 6], 44: [2, 6], 47: [2, 6], 48: [2, 6], 51: [2, 6], 55: [2, 6], 60: [2, 6] }, { 5: [2, 7], 14: [2, 7], 15: [2, 7], 19: [2, 7], 29: [2, 7], 34: [2, 7], 39: [2, 7], 44: [2, 7], 47: [2, 7], 48: [2, 7], 51: [2, 7], 55: [2, 7], 60: [2, 7] }, { 5: [2, 8], 14: [2, 8], 15: [2, 8], 19: [2, 8], 29: [2, 8], 34: [2, 8], 39: [2, 8], 44: [2, 8], 47: [2, 8], 48: [2, 8], 51: [2, 8], 55: [2, 8], 60: [2, 8] }, { 5: [2, 9], 14: [2, 9], 15: [2, 9], 19: [2, 9], 29: [2, 9], 34: [2, 9], 39: [2, 9], 44: [2, 9], 47: [2, 9], 48: [2, 9], 51: [2, 9], 55: [2, 9], 60: [2, 9] }, { 20: 25, 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 20: 36, 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 4: 37, 6: 3, 14: [2, 46], 15: [2, 46], 19: [2, 46], 29: [2, 46], 34: [2, 46], 39: [2, 46], 44: [2, 46], 47: [2, 46], 48: [2, 46], 51: [2, 46], 55: [2, 46], 60: [2, 46] }, { 4: 38, 6: 3, 14: [2, 46], 15: [2, 46], 19: [2, 46], 29: [2, 46], 34: [2, 46], 44: [2, 46], 47: [2, 46], 48: [2, 46], 51: [2, 46], 55: [2, 46], 60: [2, 46] }, { 13: 40, 15: [1, 20], 17: 39 }, { 20: 42, 56: 41, 64: 43, 65: [1, 44], 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 4: 45, 6: 3, 14: [2, 46], 15: [2, 46], 19: [2, 46], 29: [2, 46], 34: [2, 46], 47: [2, 46], 48: [2, 46], 51: [2, 46], 55: [2, 46], 60: [2, 46] }, { 5: [2, 10], 14: [2, 10], 15: [2, 10], 18: [2, 10], 19: [2, 10], 29: [2, 10], 34: [2, 10], 39: [2, 10], 44: [2, 10], 47: [2, 10], 48: [2, 10], 51: [2, 10], 55: [2, 10], 60: [2, 10] }, { 20: 46, 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 20: 47, 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 20: 48, 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 20: 42, 56: 49, 64: 43, 65: [1, 44], 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 33: [2, 78], 49: 50, 65: [2, 78], 72: [2, 78], 80: [2, 78], 81: [2, 78], 82: [2, 78], 83: [2, 78], 84: [2, 78], 85: [2, 78] }, { 23: [2, 33], 33: [2, 33], 54: [2, 33], 65: [2, 33], 68: [2, 33], 72: [2, 33], 75: [2, 33], 80: [2, 33], 81: [2, 33], 82: [2, 33], 83: [2, 33], 84: [2, 33], 85: [2, 33] }, { 23: [2, 34], 33: [2, 34], 54: [2, 34], 65: [2, 34], 68: [2, 34], 72: [2, 34], 75: [2, 34], 80: [2, 34], 81: [2, 34], 82: [2, 34], 83: [2, 34], 84: [2, 34], 85: [2, 34] }, { 23: [2, 35], 33: [2, 35], 54: [2, 35], 65: [2, 35], 68: [2, 35], 72: [2, 35], 75: [2, 35], 80: [2, 35], 81: [2, 35], 82: [2, 35], 83: [2, 35], 84: [2, 35], 85: [2, 35] }, { 23: [2, 36], 33: [2, 36], 54: [2, 36], 65: [2, 36], 68: [2, 36], 72: [2, 36], 75: [2, 36], 80: [2, 36], 81: [2, 36], 82: [2, 36], 83: [2, 36], 84: [2, 36], 85: [2, 36] }, { 23: [2, 37], 33: [2, 37], 54: [2, 37], 65: [2, 37], 68: [2, 37], 72: [2, 37], 75: [2, 37], 80: [2, 37], 81: [2, 37], 82: [2, 37], 83: [2, 37], 84: [2, 37], 85: [2, 37] }, { 23: [2, 38], 33: [2, 38], 54: [2, 38], 65: [2, 38], 68: [2, 38], 72: [2, 38], 75: [2, 38], 80: [2, 38], 81: [2, 38], 82: [2, 38], 83: [2, 38], 84: [2, 38], 85: [2, 38] }, { 23: [2, 39], 33: [2, 39], 54: [2, 39], 65: [2, 39], 68: [2, 39], 72: [2, 39], 75: [2, 39], 80: [2, 39], 81: [2, 39], 82: [2, 39], 83: [2, 39], 84: [2, 39], 85: [2, 39] }, { 23: [2, 43], 33: [2, 43], 54: [2, 43], 65: [2, 43], 68: [2, 43], 72: [2, 43], 75: [2, 43], 80: [2, 43], 81: [2, 43], 82: [2, 43], 83: [2, 43], 84: [2, 43], 85: [2, 43], 87: [1, 51] }, { 72: [1, 35], 86: 52 }, { 23: [2, 45], 33: [2, 45], 54: [2, 45], 65: [2, 45], 68: [2, 45], 72: [2, 45], 75: [2, 45], 80: [2, 45], 81: [2, 45], 82: [2, 45], 83: [2, 45], 84: [2, 45], 85: [2, 45], 87: [2, 45] }, { 52: 53, 54: [2, 82], 65: [2, 82], 72: [2, 82], 80: [2, 82], 81: [2, 82], 82: [2, 82], 83: [2, 82], 84: [2, 82], 85: [2, 82] }, { 25: 54, 38: 56, 39: [1, 58], 43: 57, 44: [1, 59], 45: 55, 47: [2, 54] }, { 28: 60, 43: 61, 44: [1, 59], 47: [2, 56] }, { 13: 63, 15: [1, 20], 18: [1, 62] }, { 15: [2, 48], 18: [2, 48] }, { 33: [2, 86], 57: 64, 65: [2, 86], 72: [2, 86], 80: [2, 86], 81: [2, 86], 82: [2, 86], 83: [2, 86], 84: [2, 86], 85: [2, 86] }, { 33: [2, 40], 65: [2, 40], 72: [2, 40], 80: [2, 40], 81: [2, 40], 82: [2, 40], 83: [2, 40], 84: [2, 40], 85: [2, 40] }, { 33: [2, 41], 65: [2, 41], 72: [2, 41], 80: [2, 41], 81: [2, 41], 82: [2, 41], 83: [2, 41], 84: [2, 41], 85: [2, 41] }, { 20: 65, 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 26: 66, 47: [1, 67] }, { 30: 68, 33: [2, 58], 65: [2, 58], 72: [2, 58], 75: [2, 58], 80: [2, 58], 81: [2, 58], 82: [2, 58], 83: [2, 58], 84: [2, 58], 85: [2, 58] }, { 33: [2, 64], 35: 69, 65: [2, 64], 72: [2, 64], 75: [2, 64], 80: [2, 64], 81: [2, 64], 82: [2, 64], 83: [2, 64], 84: [2, 64], 85: [2, 64] }, { 21: 70, 23: [2, 50], 65: [2, 50], 72: [2, 50], 80: [2, 50], 81: [2, 50], 82: [2, 50], 83: [2, 50], 84: [2, 50], 85: [2, 50] }, { 33: [2, 90], 61: 71, 65: [2, 90], 72: [2, 90], 80: [2, 90], 81: [2, 90], 82: [2, 90], 83: [2, 90], 84: [2, 90], 85: [2, 90] }, { 20: 75, 33: [2, 80], 50: 72, 63: 73, 64: 76, 65: [1, 44], 69: 74, 70: 77, 71: 78, 72: [1, 79], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 72: [1, 80] }, { 23: [2, 42], 33: [2, 42], 54: [2, 42], 65: [2, 42], 68: [2, 42], 72: [2, 42], 75: [2, 42], 80: [2, 42], 81: [2, 42], 82: [2, 42], 83: [2, 42], 84: [2, 42], 85: [2, 42], 87: [1, 51] }, { 20: 75, 53: 81, 54: [2, 84], 63: 82, 64: 76, 65: [1, 44], 69: 83, 70: 77, 71: 78, 72: [1, 79], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 26: 84, 47: [1, 67] }, { 47: [2, 55] }, { 4: 85, 6: 3, 14: [2, 46], 15: [2, 46], 19: [2, 46], 29: [2, 46], 34: [2, 46], 39: [2, 46], 44: [2, 46], 47: [2, 46], 48: [2, 46], 51: [2, 46], 55: [2, 46], 60: [2, 46] }, { 47: [2, 20] }, { 20: 86, 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 4: 87, 6: 3, 14: [2, 46], 15: [2, 46], 19: [2, 46], 29: [2, 46], 34: [2, 46], 47: [2, 46], 48: [2, 46], 51: [2, 46], 55: [2, 46], 60: [2, 46] }, { 26: 88, 47: [1, 67] }, { 47: [2, 57] }, { 5: [2, 11], 14: [2, 11], 15: [2, 11], 19: [2, 11], 29: [2, 11], 34: [2, 11], 39: [2, 11], 44: [2, 11], 47: [2, 11], 48: [2, 11], 51: [2, 11], 55: [2, 11], 60: [2, 11] }, { 15: [2, 49], 18: [2, 49] }, { 20: 75, 33: [2, 88], 58: 89, 63: 90, 64: 76, 65: [1, 44], 69: 91, 70: 77, 71: 78, 72: [1, 79], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 65: [2, 94], 66: 92, 68: [2, 94], 72: [2, 94], 80: [2, 94], 81: [2, 94], 82: [2, 94], 83: [2, 94], 84: [2, 94], 85: [2, 94] }, { 5: [2, 25], 14: [2, 25], 15: [2, 25], 19: [2, 25], 29: [2, 25], 34: [2, 25], 39: [2, 25], 44: [2, 25], 47: [2, 25], 48: [2, 25], 51: [2, 25], 55: [2, 25], 60: [2, 25] }, { 20: 93, 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 20: 75, 31: 94, 33: [2, 60], 63: 95, 64: 76, 65: [1, 44], 69: 96, 70: 77, 71: 78, 72: [1, 79], 75: [2, 60], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 20: 75, 33: [2, 66], 36: 97, 63: 98, 64: 76, 65: [1, 44], 69: 99, 70: 77, 71: 78, 72: [1, 79], 75: [2, 66], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 20: 75, 22: 100, 23: [2, 52], 63: 101, 64: 76, 65: [1, 44], 69: 102, 70: 77, 71: 78, 72: [1, 79], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 20: 75, 33: [2, 92], 62: 103, 63: 104, 64: 76, 65: [1, 44], 69: 105, 70: 77, 71: 78, 72: [1, 79], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 33: [1, 106] }, { 33: [2, 79], 65: [2, 79], 72: [2, 79], 80: [2, 79], 81: [2, 79], 82: [2, 79], 83: [2, 79], 84: [2, 79], 85: [2, 79] }, { 33: [2, 81] }, { 23: [2, 27], 33: [2, 27], 54: [2, 27], 65: [2, 27], 68: [2, 27], 72: [2, 27], 75: [2, 27], 80: [2, 27], 81: [2, 27], 82: [2, 27], 83: [2, 27], 84: [2, 27], 85: [2, 27] }, { 23: [2, 28], 33: [2, 28], 54: [2, 28], 65: [2, 28], 68: [2, 28], 72: [2, 28], 75: [2, 28], 80: [2, 28], 81: [2, 28], 82: [2, 28], 83: [2, 28], 84: [2, 28], 85: [2, 28] }, { 23: [2, 30], 33: [2, 30], 54: [2, 30], 68: [2, 30], 71: 107, 72: [1, 108], 75: [2, 30] }, { 23: [2, 98], 33: [2, 98], 54: [2, 98], 68: [2, 98], 72: [2, 98], 75: [2, 98] }, { 23: [2, 45], 33: [2, 45], 54: [2, 45], 65: [2, 45], 68: [2, 45], 72: [2, 45], 73: [1, 109], 75: [2, 45], 80: [2, 45], 81: [2, 45], 82: [2, 45], 83: [2, 45], 84: [2, 45], 85: [2, 45], 87: [2, 45] }, { 23: [2, 44], 33: [2, 44], 54: [2, 44], 65: [2, 44], 68: [2, 44], 72: [2, 44], 75: [2, 44], 80: [2, 44], 81: [2, 44], 82: [2, 44], 83: [2, 44], 84: [2, 44], 85: [2, 44], 87: [2, 44] }, { 54: [1, 110] }, { 54: [2, 83], 65: [2, 83], 72: [2, 83], 80: [2, 83], 81: [2, 83], 82: [2, 83], 83: [2, 83], 84: [2, 83], 85: [2, 83] }, { 54: [2, 85] }, { 5: [2, 13], 14: [2, 13], 15: [2, 13], 19: [2, 13], 29: [2, 13], 34: [2, 13], 39: [2, 13], 44: [2, 13], 47: [2, 13], 48: [2, 13], 51: [2, 13], 55: [2, 13], 60: [2, 13] }, { 38: 56, 39: [1, 58], 43: 57, 44: [1, 59], 45: 112, 46: 111, 47: [2, 76] }, { 33: [2, 70], 40: 113, 65: [2, 70], 72: [2, 70], 75: [2, 70], 80: [2, 70], 81: [2, 70], 82: [2, 70], 83: [2, 70], 84: [2, 70], 85: [2, 70] }, { 47: [2, 18] }, { 5: [2, 14], 14: [2, 14], 15: [2, 14], 19: [2, 14], 29: [2, 14], 34: [2, 14], 39: [2, 14], 44: [2, 14], 47: [2, 14], 48: [2, 14], 51: [2, 14], 55: [2, 14], 60: [2, 14] }, { 33: [1, 114] }, { 33: [2, 87], 65: [2, 87], 72: [2, 87], 80: [2, 87], 81: [2, 87], 82: [2, 87], 83: [2, 87], 84: [2, 87], 85: [2, 87] }, { 33: [2, 89] }, { 20: 75, 63: 116, 64: 76, 65: [1, 44], 67: 115, 68: [2, 96], 69: 117, 70: 77, 71: 78, 72: [1, 79], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 33: [1, 118] }, { 32: 119, 33: [2, 62], 74: 120, 75: [1, 121] }, { 33: [2, 59], 65: [2, 59], 72: [2, 59], 75: [2, 59], 80: [2, 59], 81: [2, 59], 82: [2, 59], 83: [2, 59], 84: [2, 59], 85: [2, 59] }, { 33: [2, 61], 75: [2, 61] }, { 33: [2, 68], 37: 122, 74: 123, 75: [1, 121] }, { 33: [2, 65], 65: [2, 65], 72: [2, 65], 75: [2, 65], 80: [2, 65], 81: [2, 65], 82: [2, 65], 83: [2, 65], 84: [2, 65], 85: [2, 65] }, { 33: [2, 67], 75: [2, 67] }, { 23: [1, 124] }, { 23: [2, 51], 65: [2, 51], 72: [2, 51], 80: [2, 51], 81: [2, 51], 82: [2, 51], 83: [2, 51], 84: [2, 51], 85: [2, 51] }, { 23: [2, 53] }, { 33: [1, 125] }, { 33: [2, 91], 65: [2, 91], 72: [2, 91], 80: [2, 91], 81: [2, 91], 82: [2, 91], 83: [2, 91], 84: [2, 91], 85: [2, 91] }, { 33: [2, 93] }, { 5: [2, 22], 14: [2, 22], 15: [2, 22], 19: [2, 22], 29: [2, 22], 34: [2, 22], 39: [2, 22], 44: [2, 22], 47: [2, 22], 48: [2, 22], 51: [2, 22], 55: [2, 22], 60: [2, 22] }, { 23: [2, 99], 33: [2, 99], 54: [2, 99], 68: [2, 99], 72: [2, 99], 75: [2, 99] }, { 73: [1, 109] }, { 20: 75, 63: 126, 64: 76, 65: [1, 44], 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 5: [2, 23], 14: [2, 23], 15: [2, 23], 19: [2, 23], 29: [2, 23], 34: [2, 23], 39: [2, 23], 44: [2, 23], 47: [2, 23], 48: [2, 23], 51: [2, 23], 55: [2, 23], 60: [2, 23] }, { 47: [2, 19] }, { 47: [2, 77] }, { 20: 75, 33: [2, 72], 41: 127, 63: 128, 64: 76, 65: [1, 44], 69: 129, 70: 77, 71: 78, 72: [1, 79], 75: [2, 72], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 5: [2, 24], 14: [2, 24], 15: [2, 24], 19: [2, 24], 29: [2, 24], 34: [2, 24], 39: [2, 24], 44: [2, 24], 47: [2, 24], 48: [2, 24], 51: [2, 24], 55: [2, 24], 60: [2, 24] }, { 68: [1, 130] }, { 65: [2, 95], 68: [2, 95], 72: [2, 95], 80: [2, 95], 81: [2, 95], 82: [2, 95], 83: [2, 95], 84: [2, 95], 85: [2, 95] }, { 68: [2, 97] }, { 5: [2, 21], 14: [2, 21], 15: [2, 21], 19: [2, 21], 29: [2, 21], 34: [2, 21], 39: [2, 21], 44: [2, 21], 47: [2, 21], 48: [2, 21], 51: [2, 21], 55: [2, 21], 60: [2, 21] }, { 33: [1, 131] }, { 33: [2, 63] }, { 72: [1, 133], 76: 132 }, { 33: [1, 134] }, { 33: [2, 69] }, { 15: [2, 12] }, { 14: [2, 26], 15: [2, 26], 19: [2, 26], 29: [2, 26], 34: [2, 26], 47: [2, 26], 48: [2, 26], 51: [2, 26], 55: [2, 26], 60: [2, 26] }, { 23: [2, 31], 33: [2, 31], 54: [2, 31], 68: [2, 31], 72: [2, 31], 75: [2, 31] }, { 33: [2, 74], 42: 135, 74: 136, 75: [1, 121] }, { 33: [2, 71], 65: [2, 71], 72: [2, 71], 75: [2, 71], 80: [2, 71], 81: [2, 71], 82: [2, 71], 83: [2, 71], 84: [2, 71], 85: [2, 71] }, { 33: [2, 73], 75: [2, 73] }, { 23: [2, 29], 33: [2, 29], 54: [2, 29], 65: [2, 29], 68: [2, 29], 72: [2, 29], 75: [2, 29], 80: [2, 29], 81: [2, 29], 82: [2, 29], 83: [2, 29], 84: [2, 29], 85: [2, 29] }, { 14: [2, 15], 15: [2, 15], 19: [2, 15], 29: [2, 15], 34: [2, 15], 39: [2, 15], 44: [2, 15], 47: [2, 15], 48: [2, 15], 51: [2, 15], 55: [2, 15], 60: [2, 15] }, { 72: [1, 138], 77: [1, 137] }, { 72: [2, 100], 77: [2, 100] }, { 14: [2, 16], 15: [2, 16], 19: [2, 16], 29: [2, 16], 34: [2, 16], 44: [2, 16], 47: [2, 16], 48: [2, 16], 51: [2, 16], 55: [2, 16], 60: [2, 16] }, { 33: [1, 139] }, { 33: [2, 75] }, { 33: [2, 32] }, { 72: [2, 101], 77: [2, 101] }, { 14: [2, 17], 15: [2, 17], 19: [2, 17], 29: [2, 17], 34: [2, 17], 39: [2, 17], 44: [2, 17], 47: [2, 17], 48: [2, 17], 51: [2, 17], 55: [2, 17], 60: [2, 17] }],
-	        defaultActions: { 4: [2, 1], 55: [2, 55], 57: [2, 20], 61: [2, 57], 74: [2, 81], 83: [2, 85], 87: [2, 18], 91: [2, 89], 102: [2, 53], 105: [2, 93], 111: [2, 19], 112: [2, 77], 117: [2, 97], 120: [2, 63], 123: [2, 69], 124: [2, 12], 136: [2, 75], 137: [2, 32] },
+	        table: [{ 3: 1, 4: 2, 5: [2, 46], 6: 3, 14: [2, 46], 15: [2, 46], 19: [2, 46], 29: [2, 46], 34: [2, 46], 48: [2, 46], 51: [2, 46], 55: [2, 46], 60: [2, 46] }, { 1: [3] }, { 5: [1, 4] }, { 5: [2, 2], 7: 5, 8: 6, 9: 7, 10: 8, 11: 9, 12: 10, 13: 11, 14: [1, 12], 15: [1, 20], 16: 17, 19: [1, 23], 24: 15, 27: 16, 29: [1, 21], 34: [1, 22], 39: [2, 2], 44: [2, 2], 47: [2, 2], 48: [1, 13], 51: [1, 14], 55: [1, 18], 59: 19, 60: [1, 24] }, { 1: [2, 1] }, { 5: [2, 47], 14: [2, 47], 15: [2, 47], 19: [2, 47], 29: [2, 47], 34: [2, 47], 39: [2, 47], 44: [2, 47], 47: [2, 47], 48: [2, 47], 51: [2, 47], 55: [2, 47], 60: [2, 47] }, { 5: [2, 3], 14: [2, 3], 15: [2, 3], 19: [2, 3], 29: [2, 3], 34: [2, 3], 39: [2, 3], 44: [2, 3], 47: [2, 3], 48: [2, 3], 51: [2, 3], 55: [2, 3], 60: [2, 3] }, { 5: [2, 4], 14: [2, 4], 15: [2, 4], 19: [2, 4], 29: [2, 4], 34: [2, 4], 39: [2, 4], 44: [2, 4], 47: [2, 4], 48: [2, 4], 51: [2, 4], 55: [2, 4], 60: [2, 4] }, { 5: [2, 5], 14: [2, 5], 15: [2, 5], 19: [2, 5], 29: [2, 5], 34: [2, 5], 39: [2, 5], 44: [2, 5], 47: [2, 5], 48: [2, 5], 51: [2, 5], 55: [2, 5], 60: [2, 5] }, { 5: [2, 6], 14: [2, 6], 15: [2, 6], 19: [2, 6], 29: [2, 6], 34: [2, 6], 39: [2, 6], 44: [2, 6], 47: [2, 6], 48: [2, 6], 51: [2, 6], 55: [2, 6], 60: [2, 6] }, { 5: [2, 7], 14: [2, 7], 15: [2, 7], 19: [2, 7], 29: [2, 7], 34: [2, 7], 39: [2, 7], 44: [2, 7], 47: [2, 7], 48: [2, 7], 51: [2, 7], 55: [2, 7], 60: [2, 7] }, { 5: [2, 8], 14: [2, 8], 15: [2, 8], 19: [2, 8], 29: [2, 8], 34: [2, 8], 39: [2, 8], 44: [2, 8], 47: [2, 8], 48: [2, 8], 51: [2, 8], 55: [2, 8], 60: [2, 8] }, { 5: [2, 9], 14: [2, 9], 15: [2, 9], 19: [2, 9], 29: [2, 9], 34: [2, 9], 39: [2, 9], 44: [2, 9], 47: [2, 9], 48: [2, 9], 51: [2, 9], 55: [2, 9], 60: [2, 9] }, { 20: 25, 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 20: 36, 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 4: 37, 6: 3, 14: [2, 46], 15: [2, 46], 19: [2, 46], 29: [2, 46], 34: [2, 46], 39: [2, 46], 44: [2, 46], 47: [2, 46], 48: [2, 46], 51: [2, 46], 55: [2, 46], 60: [2, 46] }, { 4: 38, 6: 3, 14: [2, 46], 15: [2, 46], 19: [2, 46], 29: [2, 46], 34: [2, 46], 44: [2, 46], 47: [2, 46], 48: [2, 46], 51: [2, 46], 55: [2, 46], 60: [2, 46] }, { 15: [2, 48], 17: 39, 18: [2, 48] }, { 20: 41, 56: 40, 64: 42, 65: [1, 43], 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 4: 44, 6: 3, 14: [2, 46], 15: [2, 46], 19: [2, 46], 29: [2, 46], 34: [2, 46], 47: [2, 46], 48: [2, 46], 51: [2, 46], 55: [2, 46], 60: [2, 46] }, { 5: [2, 10], 14: [2, 10], 15: [2, 10], 18: [2, 10], 19: [2, 10], 29: [2, 10], 34: [2, 10], 39: [2, 10], 44: [2, 10], 47: [2, 10], 48: [2, 10], 51: [2, 10], 55: [2, 10], 60: [2, 10] }, { 20: 45, 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 20: 46, 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 20: 47, 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 20: 41, 56: 48, 64: 42, 65: [1, 43], 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 33: [2, 78], 49: 49, 65: [2, 78], 72: [2, 78], 80: [2, 78], 81: [2, 78], 82: [2, 78], 83: [2, 78], 84: [2, 78], 85: [2, 78] }, { 23: [2, 33], 33: [2, 33], 54: [2, 33], 65: [2, 33], 68: [2, 33], 72: [2, 33], 75: [2, 33], 80: [2, 33], 81: [2, 33], 82: [2, 33], 83: [2, 33], 84: [2, 33], 85: [2, 33] }, { 23: [2, 34], 33: [2, 34], 54: [2, 34], 65: [2, 34], 68: [2, 34], 72: [2, 34], 75: [2, 34], 80: [2, 34], 81: [2, 34], 82: [2, 34], 83: [2, 34], 84: [2, 34], 85: [2, 34] }, { 23: [2, 35], 33: [2, 35], 54: [2, 35], 65: [2, 35], 68: [2, 35], 72: [2, 35], 75: [2, 35], 80: [2, 35], 81: [2, 35], 82: [2, 35], 83: [2, 35], 84: [2, 35], 85: [2, 35] }, { 23: [2, 36], 33: [2, 36], 54: [2, 36], 65: [2, 36], 68: [2, 36], 72: [2, 36], 75: [2, 36], 80: [2, 36], 81: [2, 36], 82: [2, 36], 83: [2, 36], 84: [2, 36], 85: [2, 36] }, { 23: [2, 37], 33: [2, 37], 54: [2, 37], 65: [2, 37], 68: [2, 37], 72: [2, 37], 75: [2, 37], 80: [2, 37], 81: [2, 37], 82: [2, 37], 83: [2, 37], 84: [2, 37], 85: [2, 37] }, { 23: [2, 38], 33: [2, 38], 54: [2, 38], 65: [2, 38], 68: [2, 38], 72: [2, 38], 75: [2, 38], 80: [2, 38], 81: [2, 38], 82: [2, 38], 83: [2, 38], 84: [2, 38], 85: [2, 38] }, { 23: [2, 39], 33: [2, 39], 54: [2, 39], 65: [2, 39], 68: [2, 39], 72: [2, 39], 75: [2, 39], 80: [2, 39], 81: [2, 39], 82: [2, 39], 83: [2, 39], 84: [2, 39], 85: [2, 39] }, { 23: [2, 43], 33: [2, 43], 54: [2, 43], 65: [2, 43], 68: [2, 43], 72: [2, 43], 75: [2, 43], 80: [2, 43], 81: [2, 43], 82: [2, 43], 83: [2, 43], 84: [2, 43], 85: [2, 43], 87: [1, 50] }, { 72: [1, 35], 86: 51 }, { 23: [2, 45], 33: [2, 45], 54: [2, 45], 65: [2, 45], 68: [2, 45], 72: [2, 45], 75: [2, 45], 80: [2, 45], 81: [2, 45], 82: [2, 45], 83: [2, 45], 84: [2, 45], 85: [2, 45], 87: [2, 45] }, { 52: 52, 54: [2, 82], 65: [2, 82], 72: [2, 82], 80: [2, 82], 81: [2, 82], 82: [2, 82], 83: [2, 82], 84: [2, 82], 85: [2, 82] }, { 25: 53, 38: 55, 39: [1, 57], 43: 56, 44: [1, 58], 45: 54, 47: [2, 54] }, { 28: 59, 43: 60, 44: [1, 58], 47: [2, 56] }, { 13: 62, 15: [1, 20], 18: [1, 61] }, { 33: [2, 86], 57: 63, 65: [2, 86], 72: [2, 86], 80: [2, 86], 81: [2, 86], 82: [2, 86], 83: [2, 86], 84: [2, 86], 85: [2, 86] }, { 33: [2, 40], 65: [2, 40], 72: [2, 40], 80: [2, 40], 81: [2, 40], 82: [2, 40], 83: [2, 40], 84: [2, 40], 85: [2, 40] }, { 33: [2, 41], 65: [2, 41], 72: [2, 41], 80: [2, 41], 81: [2, 41], 82: [2, 41], 83: [2, 41], 84: [2, 41], 85: [2, 41] }, { 20: 64, 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 26: 65, 47: [1, 66] }, { 30: 67, 33: [2, 58], 65: [2, 58], 72: [2, 58], 75: [2, 58], 80: [2, 58], 81: [2, 58], 82: [2, 58], 83: [2, 58], 84: [2, 58], 85: [2, 58] }, { 33: [2, 64], 35: 68, 65: [2, 64], 72: [2, 64], 75: [2, 64], 80: [2, 64], 81: [2, 64], 82: [2, 64], 83: [2, 64], 84: [2, 64], 85: [2, 64] }, { 21: 69, 23: [2, 50], 65: [2, 50], 72: [2, 50], 80: [2, 50], 81: [2, 50], 82: [2, 50], 83: [2, 50], 84: [2, 50], 85: [2, 50] }, { 33: [2, 90], 61: 70, 65: [2, 90], 72: [2, 90], 80: [2, 90], 81: [2, 90], 82: [2, 90], 83: [2, 90], 84: [2, 90], 85: [2, 90] }, { 20: 74, 33: [2, 80], 50: 71, 63: 72, 64: 75, 65: [1, 43], 69: 73, 70: 76, 71: 77, 72: [1, 78], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 72: [1, 79] }, { 23: [2, 42], 33: [2, 42], 54: [2, 42], 65: [2, 42], 68: [2, 42], 72: [2, 42], 75: [2, 42], 80: [2, 42], 81: [2, 42], 82: [2, 42], 83: [2, 42], 84: [2, 42], 85: [2, 42], 87: [1, 50] }, { 20: 74, 53: 80, 54: [2, 84], 63: 81, 64: 75, 65: [1, 43], 69: 82, 70: 76, 71: 77, 72: [1, 78], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 26: 83, 47: [1, 66] }, { 47: [2, 55] }, { 4: 84, 6: 3, 14: [2, 46], 15: [2, 46], 19: [2, 46], 29: [2, 46], 34: [2, 46], 39: [2, 46], 44: [2, 46], 47: [2, 46], 48: [2, 46], 51: [2, 46], 55: [2, 46], 60: [2, 46] }, { 47: [2, 20] }, { 20: 85, 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 4: 86, 6: 3, 14: [2, 46], 15: [2, 46], 19: [2, 46], 29: [2, 46], 34: [2, 46], 47: [2, 46], 48: [2, 46], 51: [2, 46], 55: [2, 46], 60: [2, 46] }, { 26: 87, 47: [1, 66] }, { 47: [2, 57] }, { 5: [2, 11], 14: [2, 11], 15: [2, 11], 19: [2, 11], 29: [2, 11], 34: [2, 11], 39: [2, 11], 44: [2, 11], 47: [2, 11], 48: [2, 11], 51: [2, 11], 55: [2, 11], 60: [2, 11] }, { 15: [2, 49], 18: [2, 49] }, { 20: 74, 33: [2, 88], 58: 88, 63: 89, 64: 75, 65: [1, 43], 69: 90, 70: 76, 71: 77, 72: [1, 78], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 65: [2, 94], 66: 91, 68: [2, 94], 72: [2, 94], 80: [2, 94], 81: [2, 94], 82: [2, 94], 83: [2, 94], 84: [2, 94], 85: [2, 94] }, { 5: [2, 25], 14: [2, 25], 15: [2, 25], 19: [2, 25], 29: [2, 25], 34: [2, 25], 39: [2, 25], 44: [2, 25], 47: [2, 25], 48: [2, 25], 51: [2, 25], 55: [2, 25], 60: [2, 25] }, { 20: 92, 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 20: 74, 31: 93, 33: [2, 60], 63: 94, 64: 75, 65: [1, 43], 69: 95, 70: 76, 71: 77, 72: [1, 78], 75: [2, 60], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 20: 74, 33: [2, 66], 36: 96, 63: 97, 64: 75, 65: [1, 43], 69: 98, 70: 76, 71: 77, 72: [1, 78], 75: [2, 66], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 20: 74, 22: 99, 23: [2, 52], 63: 100, 64: 75, 65: [1, 43], 69: 101, 70: 76, 71: 77, 72: [1, 78], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 20: 74, 33: [2, 92], 62: 102, 63: 103, 64: 75, 65: [1, 43], 69: 104, 70: 76, 71: 77, 72: [1, 78], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 33: [1, 105] }, { 33: [2, 79], 65: [2, 79], 72: [2, 79], 80: [2, 79], 81: [2, 79], 82: [2, 79], 83: [2, 79], 84: [2, 79], 85: [2, 79] }, { 33: [2, 81] }, { 23: [2, 27], 33: [2, 27], 54: [2, 27], 65: [2, 27], 68: [2, 27], 72: [2, 27], 75: [2, 27], 80: [2, 27], 81: [2, 27], 82: [2, 27], 83: [2, 27], 84: [2, 27], 85: [2, 27] }, { 23: [2, 28], 33: [2, 28], 54: [2, 28], 65: [2, 28], 68: [2, 28], 72: [2, 28], 75: [2, 28], 80: [2, 28], 81: [2, 28], 82: [2, 28], 83: [2, 28], 84: [2, 28], 85: [2, 28] }, { 23: [2, 30], 33: [2, 30], 54: [2, 30], 68: [2, 30], 71: 106, 72: [1, 107], 75: [2, 30] }, { 23: [2, 98], 33: [2, 98], 54: [2, 98], 68: [2, 98], 72: [2, 98], 75: [2, 98] }, { 23: [2, 45], 33: [2, 45], 54: [2, 45], 65: [2, 45], 68: [2, 45], 72: [2, 45], 73: [1, 108], 75: [2, 45], 80: [2, 45], 81: [2, 45], 82: [2, 45], 83: [2, 45], 84: [2, 45], 85: [2, 45], 87: [2, 45] }, { 23: [2, 44], 33: [2, 44], 54: [2, 44], 65: [2, 44], 68: [2, 44], 72: [2, 44], 75: [2, 44], 80: [2, 44], 81: [2, 44], 82: [2, 44], 83: [2, 44], 84: [2, 44], 85: [2, 44], 87: [2, 44] }, { 54: [1, 109] }, { 54: [2, 83], 65: [2, 83], 72: [2, 83], 80: [2, 83], 81: [2, 83], 82: [2, 83], 83: [2, 83], 84: [2, 83], 85: [2, 83] }, { 54: [2, 85] }, { 5: [2, 13], 14: [2, 13], 15: [2, 13], 19: [2, 13], 29: [2, 13], 34: [2, 13], 39: [2, 13], 44: [2, 13], 47: [2, 13], 48: [2, 13], 51: [2, 13], 55: [2, 13], 60: [2, 13] }, { 38: 55, 39: [1, 57], 43: 56, 44: [1, 58], 45: 111, 46: 110, 47: [2, 76] }, { 33: [2, 70], 40: 112, 65: [2, 70], 72: [2, 70], 75: [2, 70], 80: [2, 70], 81: [2, 70], 82: [2, 70], 83: [2, 70], 84: [2, 70], 85: [2, 70] }, { 47: [2, 18] }, { 5: [2, 14], 14: [2, 14], 15: [2, 14], 19: [2, 14], 29: [2, 14], 34: [2, 14], 39: [2, 14], 44: [2, 14], 47: [2, 14], 48: [2, 14], 51: [2, 14], 55: [2, 14], 60: [2, 14] }, { 33: [1, 113] }, { 33: [2, 87], 65: [2, 87], 72: [2, 87], 80: [2, 87], 81: [2, 87], 82: [2, 87], 83: [2, 87], 84: [2, 87], 85: [2, 87] }, { 33: [2, 89] }, { 20: 74, 63: 115, 64: 75, 65: [1, 43], 67: 114, 68: [2, 96], 69: 116, 70: 76, 71: 77, 72: [1, 78], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 33: [1, 117] }, { 32: 118, 33: [2, 62], 74: 119, 75: [1, 120] }, { 33: [2, 59], 65: [2, 59], 72: [2, 59], 75: [2, 59], 80: [2, 59], 81: [2, 59], 82: [2, 59], 83: [2, 59], 84: [2, 59], 85: [2, 59] }, { 33: [2, 61], 75: [2, 61] }, { 33: [2, 68], 37: 121, 74: 122, 75: [1, 120] }, { 33: [2, 65], 65: [2, 65], 72: [2, 65], 75: [2, 65], 80: [2, 65], 81: [2, 65], 82: [2, 65], 83: [2, 65], 84: [2, 65], 85: [2, 65] }, { 33: [2, 67], 75: [2, 67] }, { 23: [1, 123] }, { 23: [2, 51], 65: [2, 51], 72: [2, 51], 80: [2, 51], 81: [2, 51], 82: [2, 51], 83: [2, 51], 84: [2, 51], 85: [2, 51] }, { 23: [2, 53] }, { 33: [1, 124] }, { 33: [2, 91], 65: [2, 91], 72: [2, 91], 80: [2, 91], 81: [2, 91], 82: [2, 91], 83: [2, 91], 84: [2, 91], 85: [2, 91] }, { 33: [2, 93] }, { 5: [2, 22], 14: [2, 22], 15: [2, 22], 19: [2, 22], 29: [2, 22], 34: [2, 22], 39: [2, 22], 44: [2, 22], 47: [2, 22], 48: [2, 22], 51: [2, 22], 55: [2, 22], 60: [2, 22] }, { 23: [2, 99], 33: [2, 99], 54: [2, 99], 68: [2, 99], 72: [2, 99], 75: [2, 99] }, { 73: [1, 108] }, { 20: 74, 63: 125, 64: 75, 65: [1, 43], 72: [1, 35], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 5: [2, 23], 14: [2, 23], 15: [2, 23], 19: [2, 23], 29: [2, 23], 34: [2, 23], 39: [2, 23], 44: [2, 23], 47: [2, 23], 48: [2, 23], 51: [2, 23], 55: [2, 23], 60: [2, 23] }, { 47: [2, 19] }, { 47: [2, 77] }, { 20: 74, 33: [2, 72], 41: 126, 63: 127, 64: 75, 65: [1, 43], 69: 128, 70: 76, 71: 77, 72: [1, 78], 75: [2, 72], 78: 26, 79: 27, 80: [1, 28], 81: [1, 29], 82: [1, 30], 83: [1, 31], 84: [1, 32], 85: [1, 34], 86: 33 }, { 5: [2, 24], 14: [2, 24], 15: [2, 24], 19: [2, 24], 29: [2, 24], 34: [2, 24], 39: [2, 24], 44: [2, 24], 47: [2, 24], 48: [2, 24], 51: [2, 24], 55: [2, 24], 60: [2, 24] }, { 68: [1, 129] }, { 65: [2, 95], 68: [2, 95], 72: [2, 95], 80: [2, 95], 81: [2, 95], 82: [2, 95], 83: [2, 95], 84: [2, 95], 85: [2, 95] }, { 68: [2, 97] }, { 5: [2, 21], 14: [2, 21], 15: [2, 21], 19: [2, 21], 29: [2, 21], 34: [2, 21], 39: [2, 21], 44: [2, 21], 47: [2, 21], 48: [2, 21], 51: [2, 21], 55: [2, 21], 60: [2, 21] }, { 33: [1, 130] }, { 33: [2, 63] }, { 72: [1, 132], 76: 131 }, { 33: [1, 133] }, { 33: [2, 69] }, { 15: [2, 12], 18: [2, 12] }, { 14: [2, 26], 15: [2, 26], 19: [2, 26], 29: [2, 26], 34: [2, 26], 47: [2, 26], 48: [2, 26], 51: [2, 26], 55: [2, 26], 60: [2, 26] }, { 23: [2, 31], 33: [2, 31], 54: [2, 31], 68: [2, 31], 72: [2, 31], 75: [2, 31] }, { 33: [2, 74], 42: 134, 74: 135, 75: [1, 120] }, { 33: [2, 71], 65: [2, 71], 72: [2, 71], 75: [2, 71], 80: [2, 71], 81: [2, 71], 82: [2, 71], 83: [2, 71], 84: [2, 71], 85: [2, 71] }, { 33: [2, 73], 75: [2, 73] }, { 23: [2, 29], 33: [2, 29], 54: [2, 29], 65: [2, 29], 68: [2, 29], 72: [2, 29], 75: [2, 29], 80: [2, 29], 81: [2, 29], 82: [2, 29], 83: [2, 29], 84: [2, 29], 85: [2, 29] }, { 14: [2, 15], 15: [2, 15], 19: [2, 15], 29: [2, 15], 34: [2, 15], 39: [2, 15], 44: [2, 15], 47: [2, 15], 48: [2, 15], 51: [2, 15], 55: [2, 15], 60: [2, 15] }, { 72: [1, 137], 77: [1, 136] }, { 72: [2, 100], 77: [2, 100] }, { 14: [2, 16], 15: [2, 16], 19: [2, 16], 29: [2, 16], 34: [2, 16], 44: [2, 16], 47: [2, 16], 48: [2, 16], 51: [2, 16], 55: [2, 16], 60: [2, 16] }, { 33: [1, 138] }, { 33: [2, 75] }, { 33: [2, 32] }, { 72: [2, 101], 77: [2, 101] }, { 14: [2, 17], 15: [2, 17], 19: [2, 17], 29: [2, 17], 34: [2, 17], 39: [2, 17], 44: [2, 17], 47: [2, 17], 48: [2, 17], 51: [2, 17], 55: [2, 17], 60: [2, 17] }],
+	        defaultActions: { 4: [2, 1], 54: [2, 55], 56: [2, 20], 60: [2, 57], 73: [2, 81], 82: [2, 85], 86: [2, 18], 90: [2, 89], 101: [2, 53], 104: [2, 93], 110: [2, 19], 111: [2, 77], 116: [2, 97], 119: [2, 63], 122: [2, 69], 135: [2, 75], 136: [2, 32] },
 	        parseError: function parseError(str, hash) {
 	            throw new Error(str);
 	        },
@@ -24000,11 +25583,10 @@
 	                this.begin(condition);
 	            } };
 	        lexer.options = {};
-	        lexer.performAction = function anonymous(yy, yy_, $avoiding_name_collisions, YY_START
-	        /*``*/) {
+	        lexer.performAction = function anonymous(yy, yy_, $avoiding_name_collisions, YY_START) {
 
 	            function strip(start, end) {
-	                return yy_.yytext = yy_.yytext.substr(start, yy_.yyleng - end);
+	                return yy_.yytext = yy_.yytext.substring(start, yy_.yyleng - end + start);
 	            }
 	            switch ($avoiding_name_collisions) {
 	                case 0:
@@ -24039,7 +25621,7 @@
 	                    if (this.conditionStack[this.conditionStack.length - 1] === 'raw') {
 	                        return 15;
 	                    } else {
-	                        yy_.yytext = yy_.yytext.substr(5, yy_.yyleng - 9);
+	                        strip(5, 9);
 	                        return 'END_RAW_BLOCK';
 	                    }
 
@@ -24176,7 +25758,7 @@
 	                    break;
 	            }
 	        };
-	        lexer.rules = [/^(?:[^\x00]*?(?=(\{\{)))/, /^(?:[^\x00]+)/, /^(?:[^\x00]{2,}?(?=(\{\{|\\\{\{|\\\\\{\{|$)))/, /^(?:\{\{\{\{(?=[^\/]))/, /^(?:\{\{\{\{\/[^\s!"#%-,\.\/;->@\[-\^`\{-~]+(?=[=}\s\/.])\}\}\}\})/, /^(?:[^\x00]*?(?=(\{\{\{\{)))/, /^(?:[\s\S]*?--(~)?\}\})/, /^(?:\()/, /^(?:\))/, /^(?:\{\{\{\{)/, /^(?:\}\}\}\})/, /^(?:\{\{(~)?>)/, /^(?:\{\{(~)?#>)/, /^(?:\{\{(~)?#\*?)/, /^(?:\{\{(~)?\/)/, /^(?:\{\{(~)?\^\s*(~)?\}\})/, /^(?:\{\{(~)?\s*else\s*(~)?\}\})/, /^(?:\{\{(~)?\^)/, /^(?:\{\{(~)?\s*else\b)/, /^(?:\{\{(~)?\{)/, /^(?:\{\{(~)?&)/, /^(?:\{\{(~)?!--)/, /^(?:\{\{(~)?![\s\S]*?\}\})/, /^(?:\{\{(~)?\*?)/, /^(?:=)/, /^(?:\.\.)/, /^(?:\.(?=([=~}\s\/.)|])))/, /^(?:[\/.])/, /^(?:\s+)/, /^(?:\}(~)?\}\})/, /^(?:(~)?\}\})/, /^(?:"(\\["]|[^"])*")/, /^(?:'(\\[']|[^'])*')/, /^(?:@)/, /^(?:true(?=([~}\s)])))/, /^(?:false(?=([~}\s)])))/, /^(?:undefined(?=([~}\s)])))/, /^(?:null(?=([~}\s)])))/, /^(?:-?[0-9]+(?:\.[0-9]+)?(?=([~}\s)])))/, /^(?:as\s+\|)/, /^(?:\|)/, /^(?:([^\s!"#%-,\.\/;->@\[-\^`\{-~]+(?=([=~}\s\/.)|]))))/, /^(?:\[(\\\]|[^\]])*\])/, /^(?:.)/, /^(?:$)/];
+	        lexer.rules = [/^(?:[^\x00]*?(?=(\{\{)))/, /^(?:[^\x00]+)/, /^(?:[^\x00]{2,}?(?=(\{\{|\\\{\{|\\\\\{\{|$)))/, /^(?:\{\{\{\{(?=[^\/]))/, /^(?:\{\{\{\{\/[^\s!"#%-,\.\/;->@\[-\^`\{-~]+(?=[=}\s\/.])\}\}\}\})/, /^(?:[^\x00]+?(?=(\{\{\{\{)))/, /^(?:[\s\S]*?--(~)?\}\})/, /^(?:\()/, /^(?:\))/, /^(?:\{\{\{\{)/, /^(?:\}\}\}\})/, /^(?:\{\{(~)?>)/, /^(?:\{\{(~)?#>)/, /^(?:\{\{(~)?#\*?)/, /^(?:\{\{(~)?\/)/, /^(?:\{\{(~)?\^\s*(~)?\}\})/, /^(?:\{\{(~)?\s*else\s*(~)?\}\})/, /^(?:\{\{(~)?\^)/, /^(?:\{\{(~)?\s*else\b)/, /^(?:\{\{(~)?\{)/, /^(?:\{\{(~)?&)/, /^(?:\{\{(~)?!--)/, /^(?:\{\{(~)?![\s\S]*?\}\})/, /^(?:\{\{(~)?\*?)/, /^(?:=)/, /^(?:\.\.)/, /^(?:\.(?=([=~}\s\/.)|])))/, /^(?:[\/.])/, /^(?:\s+)/, /^(?:\}(~)?\}\})/, /^(?:(~)?\}\})/, /^(?:"(\\["]|[^"])*")/, /^(?:'(\\[']|[^'])*')/, /^(?:@)/, /^(?:true(?=([~}\s)])))/, /^(?:false(?=([~}\s)])))/, /^(?:undefined(?=([~}\s)])))/, /^(?:null(?=([~}\s)])))/, /^(?:-?[0-9]+(?:\.[0-9]+)?(?=([~}\s)])))/, /^(?:as\s+\|)/, /^(?:\|)/, /^(?:([^\s!"#%-,\.\/;->@\[-\^`\{-~]+(?=([=~}\s\/.)|]))))/, /^(?:\[(\\\]|[^\]])*\])/, /^(?:.)/, /^(?:$)/];
 	        lexer.conditions = { "mu": { "rules": [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44], "inclusive": false }, "emu": { "rules": [2], "inclusive": false }, "com": { "rules": [6], "inclusive": false }, "raw": { "rules": [3, 4, 5], "inclusive": false }, "INITIAL": { "rules": [0, 1, 44], "inclusive": true } };
 	        return lexer;
 	    })();
@@ -24547,7 +26129,7 @@
 	    return;
 	  }
 
-	  // We omit the last node if it's whitespace only and not preceeded by a non-content node.
+	  // We omit the last node if it's whitespace only and not preceded by a non-content node.
 	  var original = current.value;
 	  current.value = current.value.replace(multiple ? /\s+$/ : /[ \t]+$/, '');
 	  current.leftStripped = current.value !== original;
@@ -24561,7 +26143,7 @@
 
 	unwrapExports(whitespaceControl);
 
-	var helpers$2 = createCommonjsModule(function (module, exports) {
+	var helpers$1 = createCommonjsModule(function (module, exports) {
 
 	exports.__esModule = true;
 	exports.SourceLocation = SourceLocation;
@@ -24606,7 +26188,7 @@
 
 	function id(token) {
 	  if (/^\[.*\]$/.test(token)) {
-	    return token.substr(1, token.length - 2);
+	    return token.substring(1, token.length - 1);
 	  } else {
 	    return token;
 	  }
@@ -24791,21 +26373,22 @@
 
 	});
 
-	unwrapExports(helpers$2);
-	var helpers_1$1 = helpers$2.SourceLocation;
-	var helpers_2 = helpers$2.id;
-	var helpers_3 = helpers$2.stripFlags;
-	var helpers_4 = helpers$2.stripComment;
-	var helpers_5 = helpers$2.preparePath;
-	var helpers_6 = helpers$2.prepareMustache;
-	var helpers_7 = helpers$2.prepareRawBlock;
-	var helpers_8 = helpers$2.prepareBlock;
-	var helpers_9 = helpers$2.prepareProgram;
-	var helpers_10 = helpers$2.preparePartialBlock;
+	unwrapExports(helpers$1);
+	var helpers_1$1 = helpers$1.SourceLocation;
+	var helpers_2$1 = helpers$1.id;
+	var helpers_3 = helpers$1.stripFlags;
+	var helpers_4 = helpers$1.stripComment;
+	var helpers_5 = helpers$1.preparePath;
+	var helpers_6 = helpers$1.prepareMustache;
+	var helpers_7 = helpers$1.prepareRawBlock;
+	var helpers_8 = helpers$1.prepareBlock;
+	var helpers_9 = helpers$1.prepareProgram;
+	var helpers_10 = helpers$1.preparePartialBlock;
 
-	var base$2 = createCommonjsModule(function (module, exports) {
+	var base$1 = createCommonjsModule(function (module, exports) {
 
 	exports.__esModule = true;
+	exports.parseWithoutProcessing = parseWithoutProcessing;
 	exports.parse = parse;
 	// istanbul ignore next
 
@@ -24825,7 +26408,7 @@
 
 
 
-	var Helpers = _interopRequireWildcard(helpers$2);
+	var Helpers = _interopRequireWildcard(helpers$1);
 
 
 
@@ -24834,7 +26417,7 @@
 	var yy = {};
 	utils.extend(yy, Helpers);
 
-	function parse(input, options) {
+	function parseWithoutProcessing(input, options) {
 	  // Just return if an already-compiled AST was passed in.
 	  if (input.type === 'Program') {
 	    return input;
@@ -24847,15 +26430,24 @@
 	    return new yy.SourceLocation(options && options.srcName, locInfo);
 	  };
 
+	  var ast = _parser2['default'].parse(input);
+
+	  return ast;
+	}
+
+	function parse(input, options) {
+	  var ast = parseWithoutProcessing(input, options);
 	  var strip = new _whitespaceControl2['default'](options);
-	  return strip.accept(_parser2['default'].parse(input));
+
+	  return strip.accept(ast);
 	}
 
 	});
 
-	unwrapExports(base$2);
-	var base_1$1 = base$2.parse;
-	var base_2$1 = base$2.parser;
+	unwrapExports(base$1);
+	var base_1$1 = base$1.parseWithoutProcessing;
+	var base_2$1 = base$1.parse;
+	var base_3$1 = base$1.parser;
 
 	var compiler = createCommonjsModule(function (module, exports) {
 
@@ -25346,8 +26938,8 @@
 	    options.useDepths = true;
 	  }
 
-	  var ast$$1 = env.parse(input, options),
-	      environment = new env.Compiler().compile(ast$$1, options);
+	  var ast = env.parse(input, options),
+	      environment = new env.Compiler().compile(ast, options);
 	  return new env.JavaScriptCompiler().compile(environment, options);
 	}
 
@@ -25369,8 +26961,8 @@
 	  var compiled = undefined;
 
 	  function compileInput() {
-	    var ast$$1 = env.parse(input, options),
-	        environment = new env.Compiler().compile(ast$$1, options),
+	    var ast = env.parse(input, options),
+	        environment = new env.Compiler().compile(ast, options),
 	        templateSpec = new env.JavaScriptCompiler().compile(environment, options, undefined, true);
 	    return env.template(templateSpec);
 	  }
@@ -28630,7 +30222,7 @@
 
 	try {
 	  /* istanbul ignore next */
-	  {
+	  if (typeof undefined !== 'function' || !undefined.amd) {
 	    // We don't support this in AMD environments. For these environments, we asusme that
 	    // they are running on the browser and thus have no need for the source-map library.
 	    var SourceMap = sourceMap;
@@ -28818,10 +30410,19 @@
 	  // PUBLIC API: You can override these methods in a subclass to provide
 	  // alternative compiled forms for name lookup and buffering semantics
 	  nameLookup: function nameLookup(parent, name /* , type*/) {
-	    if (JavaScriptCompiler.isValidJavaScriptVariableName(name)) {
-	      return [parent, '.', name];
-	    } else {
-	      return [parent, '[', JSON.stringify(name), ']'];
+	    var isEnumerable = [this.aliasable('container.propertyIsEnumerable'), '.call(', parent, ',"constructor")'];
+
+	    if (name === 'constructor') {
+	      return ['(', isEnumerable, '?', _actualLookup(), ' : undefined)'];
+	    }
+	    return _actualLookup();
+
+	    function _actualLookup() {
+	      if (JavaScriptCompiler.isValidJavaScriptVariableName(name)) {
+	        return [parent, '.', name];
+	      } else {
+	        return [parent, '[', JSON.stringify(name), ']'];
+	      }
 	    }
 	  },
 	  depthedLookup: function depthedLookup(name) {
@@ -29020,7 +30621,6 @@
 	    for (var alias in this.aliases) {
 	      // eslint-disable-line guard-for-in
 	      var node = this.aliases[alias];
-
 	      if (this.aliases.hasOwnProperty(alias) && node.children && node.referenceCount > 1) {
 	        varDeclarations += ', alias' + ++aliasCount + '=' + alias;
 	        node.children[0] = 'alias' + aliasCount;
@@ -29115,7 +30715,7 @@
 	  // replace it on the stack with the result of properly
 	  // invoking blockHelperMissing.
 	  blockValue: function blockValue(name) {
-	    var blockHelperMissing = this.aliasable('helpers.blockHelperMissing'),
+	    var blockHelperMissing = this.aliasable('container.hooks.blockHelperMissing'),
 	        params = [this.contextName(0)];
 	    this.setupHelperArgs(name, 0, params);
 
@@ -29133,7 +30733,7 @@
 	  // On stack, after, if lastHelper: value
 	  ambiguousBlockValue: function ambiguousBlockValue() {
 	    // We're being a bit cheeky and reusing the options value from the prior exec
-	    var blockHelperMissing = this.aliasable('helpers.blockHelperMissing'),
+	    var blockHelperMissing = this.aliasable('container.hooks.blockHelperMissing'),
 	        params = [this.contextName(0)];
 	    this.setupHelperArgs('', 0, params, true);
 
@@ -29344,7 +30944,7 @@
 	    if (this.hash) {
 	      this.hashes.push(this.hash);
 	    }
-	    this.hash = { values: [], types: [], contexts: [], ids: [] };
+	    this.hash = { values: {}, types: [], contexts: [], ids: [] };
 	  },
 	  popHash: function popHash() {
 	    var hash = this.hash;
@@ -29424,18 +31024,33 @@
 	  // If the helper is not found, `helperMissing` is called.
 	  invokeHelper: function invokeHelper(paramSize, name, isSimple) {
 	    var nonHelper = this.popStack(),
-	        helper = this.setupHelper(paramSize, name),
-	        simple = isSimple ? [helper.name, ' || '] : '';
+	        helper = this.setupHelper(paramSize, name);
 
-	    var lookup = ['('].concat(simple, nonHelper);
-	    if (!this.options.strict) {
-	      lookup.push(' || ', this.aliasable('helpers.helperMissing'));
+	    var possibleFunctionCalls = [];
+
+	    if (isSimple) {
+	      // direct call to helper
+	      possibleFunctionCalls.push(helper.name);
 	    }
-	    lookup.push(')');
+	    // call a function from the input object
+	    possibleFunctionCalls.push(nonHelper);
+	    if (!this.options.strict) {
+	      possibleFunctionCalls.push(this.aliasable('container.hooks.helperMissing'));
+	    }
 
-	    this.push(this.source.functionCall(lookup, 'call', helper.callParams));
+	    var functionLookupCode = ['(', this.itemsSeparatedBy(possibleFunctionCalls, '||'), ')'];
+	    var functionCall = this.source.functionCall(functionLookupCode, 'call', helper.callParams);
+	    this.push(functionCall);
 	  },
 
+	  itemsSeparatedBy: function itemsSeparatedBy(items, separator) {
+	    var result = [];
+	    result.push(items[0]);
+	    for (var i = 1; i < items.length; i++) {
+	      result.push(separator, items[i]);
+	    }
+	    return result;
+	  },
 	  // [invokeKnownHelper]
 	  //
 	  // On stack, before: hash, inverse, program, params..., ...
@@ -29473,7 +31088,7 @@
 	    var lookup = ['(', '(helper = ', helperName, ' || ', nonHelper, ')'];
 	    if (!this.options.strict) {
 	      lookup[0] = '(helper = ';
-	      lookup.push(' != null ? helper : ', this.aliasable('helpers.helperMissing'));
+	      lookup.push(' != null ? helper : ', this.aliasable('container.hooks.helperMissing'));
 	    }
 
 	    this.push(['(', lookup, helper.paramsInit ? ['),(', helper.paramsInit] : [], '),', '(typeof helper === ', this.aliasable('"function"'), ' ? ', this.source.functionCall('helper', 'call', helper.callParams), ' : helper))']);
@@ -29867,6 +31482,7 @@
 
 	  setupHelperArgs: function setupHelperArgs(helper, paramSize, params, useRegister) {
 	    var options = this.setupParams(helper, paramSize, params);
+	    options.loc = JSON.stringify(this.source.currentLocation);
 	    options = this.objectLiteral(options);
 	    if (useRegister) {
 	      this.useRegister('options');
@@ -29908,7 +31524,7 @@
 	  }
 
 	  if (requireTerminal) {
-	    return [compiler.aliasable('container.strict'), '(', stack, ', ', compiler.quotedString(parts[i]), ')'];
+	    return [compiler.aliasable('container.strict'), '(', stack, ', ', compiler.quotedString(parts[i]), ', ', JSON.stringify(compiler.source.currentLocation), ' )'];
 	  } else {
 	    return stack;
 	  }
@@ -29968,8 +31584,9 @@
 	  hb.AST = _handlebarsCompilerAst2['default'];
 	  hb.Compiler = compiler.Compiler;
 	  hb.JavaScriptCompiler = _handlebarsCompilerJavascriptCompiler2['default'];
-	  hb.Parser = base$2.parser;
-	  hb.parse = base$2.parse;
+	  hb.Parser = base$1.parser;
+	  hb.parse = base$1.parse;
+	  hb.parseWithoutProcessing = base$1.parseWithoutProcessing;
 
 	  return hb;
 	}
@@ -30187,19 +31804,19 @@
 
 	// var local = handlebars.create();
 
-	var handlebars$2 = handlebars['default'];
+	var handlebars$1 = handlebars['default'];
 
 
-	handlebars$2.PrintVisitor = printer.PrintVisitor;
-	handlebars$2.print = printer.print;
+	handlebars$1.PrintVisitor = printer.PrintVisitor;
+	handlebars$1.print = printer.print;
 
-	var lib = handlebars$2;
+	var lib = handlebars$1;
 
 	// Publish a Node.js require() handler for .handlebars and .hbs files
 	function extension(module, filename) {
-	  var fs$$1 = fs;
-	  var templateString = fs$$1.readFileSync(filename, 'utf8');
-	  module.exports = handlebars$2.compile(templateString);
+	  var fs$1 = fs;
+	  var templateString = fs$1.readFileSync(filename, 'utf8');
+	  module.exports = handlebars$1.compile(templateString);
 	}
 	/* istanbul ignore else */
 	if (typeof commonjsRequire !== 'undefined' && commonjsRequire.extensions) {
@@ -30268,7 +31885,7 @@
 	// quick workaround, we just put all the events that any subclass may use here.  But the real fix
 	// should be to make mixinEventHandling() traverse up the superclass chain.
 
-	mixinEventHandling(GridRenderer, 'GridRenderer', [
+	mixinEventHandling(GridRenderer, [
 			'columnResize'        // A column is resized.
 		, 'unableToRender'      // A grid renderer can't render the data in the view it's bound to.
 		, 'limited'             // The grid table isn't rendering all possible rows.
@@ -30380,163 +31997,11 @@
 		return true;
 	};
 
-	// GridRendererHandlebars {{{1
-
-	var GridRendererHandlebars = makeSubclass('GridRendererHandlebars', GridRenderer, function () {
-		var self = this;
-
-		self.super.ctor.apply(self, arguments);
-
-		lib.registerHelper('rowval', function (groupField) {
-			if (['number', 'string'].indexOf(typeof groupField) < 0) {
-				throw new Error('In Handlebars "rowval" helper, `groupField` must be a number or string');
-			}
-
-			var groupFieldIndex;
-
-			if (typeof groupField === 'number') {
-				groupFieldIndex = groupField;
-
-				if (groupFieldIndex < 0) {
-					throw new Error('In Handlebars "rowval" helper, group field index "' + groupField + '" out of range');
-				}
-			}
-			else {
-				groupFieldIndex = self.data.groupFields.indexOf(groupField);
-
-				if (groupFieldIndex < 0) {
-					throw new Error('In Handlebars "rowval" helper, specified field "' + groupField + '" is not part of group');
-				}
-			}
-
-			return self.data.rowVals[this.rowValIndex][groupFieldIndex];
-		});
-
-		lib.registerHelper('colval', function (pivotField) {
-			if (['number', 'string'].indexOf(typeof pivotField) < 0) {
-				throw new Error('In Handlebars "rowval" helper, `pivotField` must be a number or string');
-			}
-
-			var pivotFieldIndex;
-
-			if (typeof pivotField === 'number') {
-				pivotFieldIndex = pivotField;
-
-				if (pivotFieldIndex < 0) {
-					throw new Error('In Handlebars "rowval" helper, pivot field index "' + pivotField + '" out of range');
-				}
-			}
-			else {
-				pivotFieldIndex = self.data.pivotFields.indexOf(pivotField);
-
-				if (pivotFieldIndex < 0) {
-					throw new Error('In Handlebars "rowval" helper, specified field "' + pivotField + '" is not part of pivot');
-				}
-			}
-
-			return self.data.colVals[this.colValIndex][pivotFieldIndex];
-		});
-	});
-
-	// #canRender {{{2
-
-	GridRendererHandlebars.prototype.canRender = function (what) {
-		return true;
-	};
-
-	// #_draw_plain {{{2
-
-	GridRendererHandlebars.prototype._draw_plain = function (root, data, typeInfo, opts) {
-		var self = this;
-
-		underscore.each(data.data, function (row) {
-			var div = jQuery('<div>').appendTo(root);
-			var context = {};
-			underscore.each(row.rowData, function (v, k) {
-				context[k] = v.value;
-			});
-			div.html(self.template(context));
-		});
-	};
-
-	// #_draw_group {{{2
-
-	GridRendererHandlebars.prototype._draw_group = function (root, data, typeInfo, opts) {
-		var self = this;
-
-		underscore.each(data.data, function (group, rowValIndex) {
-			var div = jQuery('<div>').appendTo(root);
-			var context = {
-				rowValIndex: rowValIndex
-			};
-			div.html(self.template(context));
-		});
-	};
-
-	// #_draw_pivot {{{2
-
-	GridRendererHandlebars.prototype._draw_pivot = function (root, data, typeInfo, opts) {
-		var self = this;
-
-		underscore.each(data.data, function (group, rowValIndex) {
-			underscore.each(group, function (pivot, colValIndex) {
-				var div = jQuery('<div>').appendTo(root);
-				var context = {
-					rowValIndex: rowValIndex,
-					colValIndex: colValIndex
-				};
-				div.html(self.template(context));
-			});
-		});
-	};
-
-	// #draw {{{2
-
-	GridRendererHandlebars.prototype.draw = function (root, cont, opts) {
-		var self = this;
-
-		if (cont != null && typeof cont !== 'function') {
-			throw new Error('Call Error: `cont` must be null or a function');
-		}
-
-		cont = cont || I;
-
-		return self.super.draw(root, opts, function (ok, data, typeInfo) {
-			if (!ok) {
-				return cont();
-			}
-
-			if (data.isPlain) {
-				self.template = lib.compile(self.opts.whenPlain.template);
-				self._draw_plain(root, data, typeInfo, opts);
-			}
-			else if (data.isGroup) {
-				self.template = lib.compile(self.opts.whenGroup.template);
-				self._draw_group(root, data, typeInfo, opts);
-			}
-			else if (data.isPivot) {
-				self.template = lib.compile(self.opts.whenPivot.template);
-				self._draw_group(root, data, typeInfo, opts);
-			}
-			self.addWorkHandler();
-			return cont();
-		});
-	};
-
-	// #addWorkHandler {{{2
-
-	GridRendererHandlebars.prototype.addWorkHandler = function () {
-		var self = this;
-
-		self.view.on(View.events.workEnd, function (info, ops) {
-			self.draw(self.root, self.drawOpts);
-		}, { who: self, limit: 1 });
-	};
-
 	// Registry {{{1
 
 	GridRenderer.registry = new OrdMap();
-	GridRenderer.registry.set('handlebars', GridRendererHandlebars);
+
+	// Imports {{{1
 
 	// Csv {{{1
 
@@ -30615,8 +32080,13 @@
 	 * The value to add.
 	 */
 
-	Csv.prototype.addCol = function (x) {
+	Csv.prototype.addCol = function (x, opts) {
 		var self = this;
+
+		opts = opts || {};
+		opts = underscore.defaults(opts, {
+			prepend: false
+		});
 
 		if (x == null) {
 			x = '';
@@ -30631,7 +32101,12 @@
 			self.addRow();
 		}
 
-		self.lastRow.rowData.push(x);
+		if (opts.prepend) {
+			self.lastRow.rowData.unshift(x);
+		}
+		else {
+			self.lastRow.rowData.push(x);
+		}
 	};
 
 	// #clear {{{2
@@ -30663,13 +32138,15 @@
 		var sep = '"' + self.opts.separator + '"';
 		var len = self.order != null ? self.order.length : self.data.length;
 
+		var quoteRegexp = /"/g;
+
 		for (i = 0; i < len; i += 1) {
 			row = self.order != null ? self.getRowById(self.order[i]) : self.data[i];
 			if (i > 0) {
 				s += '\r\n';
 			}
 			s += '"' + row.rowData.map(function (s) {
-				return s.replace('"', '""');
+				return s.replace(quoteRegexp, '""');
 			}).join(sep) + '"';
 		}
 
@@ -30710,6 +32187,112 @@
 	};
 
 	// GridTable {{{1
+	// JSDoc Types {{{2
+
+	/**
+	 * @typedef {function} GridTable~RowRenderCb
+	 * A callback that gets executed when a row is rendered in the table.
+	 *
+	 * @param {jQuery} tr
+	 * The row we've just finished rendering.
+	 *
+	 * @param {object} opts
+	 * Additional information for the callback.
+	 *
+	 * @param {boolean} opts.isGroup
+	 * True if we're in group output.
+	 *
+	 * @param {boolean} opts.groupMode
+	 * The group output mode, either "summary" or "detail."
+	 *
+	 * @param {string} opts.groupField
+	 * In group output, detail mode, when rendering a group (i.e. non-leaf node): the name of the field
+	 * that is currently being rendered.  Example: When grouping by [State, County] this property can
+	 * either by "State" or "County" depending on what part of the tree is being rendered.
+	 *
+	 * @param {string} opts.rowValElt
+	 * In group output, detail mode, when rendering a group (i.e. non-leaf node): the shared value of
+	 * the field given by `opts.groupField` for all rows in the grouping currently being rendered.
+	 * Following the previous example, it could be "New Mexico" or "Donut County."
+	 *
+	 * @param {metadataNode} opts.groupMetadata
+	 * In group output, detail mode, when rendering a group (i.e. non-leaf node): additional metadata
+	 * from the grouping process.  Can be used to find the number of children, for example.
+	 *
+	 * @param {Array.<object>} rowData
+	 * In group output, detail mode, when rendering a row (i.e. leaf node): the data that has been
+	 * rendered.
+	 *
+	 * @param {number} rowNum
+	 * In group output, detail mode, when rendering a row (i.e. leaf node): the unique row identifier.
+	 */
+
+	/**
+	 * @typedef {function} GridTable~AddCols_Value_Plain
+	 *
+	 * @param {Array.<object>} rowData
+	 * The data of the row that has been rendered.
+	 *
+	 * @param {number} rowNum
+	 * The unique ID of thw row that was rendered.
+	 */
+
+	/**
+	 * @typedef {function} GridTable~AddCols_Value_Pivot
+	 *
+	 * @param {object} data
+	 * @param {number} groupNum
+	 */
+
+	/**
+	 * @typedef GridTable~AddCols
+	 *
+	 * @property {string} name
+	 * The name of the column to add, which appears in the table header.
+	 *
+	 * @property {GridTable~AddCols_Value_Plain|GridTable~AddCols_Value_Pivot} value
+	 * A function that is called to determine what gets put into the table cell.
+	 */
+
+	/**
+	 * @typedef GridTable~CtorOpts
+	 *
+	 * @property {boolean} [drawInternalBorders=true]
+	 * If true, draw borders between the cells in the table.
+	 *
+	 * @property {boolean} [zebraStriping=true]
+	 * If true, use subtle alternating background colors in the table rows.
+	 *
+	 * @property {boolean} [generateCsv=true]
+	 * If true, allow the generation of a CSV file from the table contents.
+	 *
+	 * @property {boolean} [stealGridFooter=true]
+	 * If true, absorb the element specified by `footer` into the table footer.
+	 *
+	 * @property {object} [addClass]
+	 * Additional classes to add when generating the table.
+	 *
+	 * @property {string} [addClass.table]
+	 * Classes to add on the table element itself.
+	 *
+	 * @property {Array.<GridTable~AddCols>} [addCols]
+	 * Columns to add to the table.  These are always computed as rows are rendered, and they are not
+	 * backed by the View so they can't be sorted or filtered.  This option is best used as a way of
+	 * adding some UI to the table row.
+	 *
+	 * @property {object} [events]
+	 * Callbacks to bind on various events.
+	 *
+	 * @property {GridTable~RowRenderCb} [events.rowRender]
+	 * A callback to invoke when a row is rendered.
+	 *
+	 * @property {jQuery} [footer]
+	 * **Internal** An element to put into the table footer.
+	 *
+	 * @property {boolean} [fixedHeight]
+	 * **Internal** If true, configure the table to scroll within the parent element.
+	 */
+
 	// Constructor {{{2
 
 	/**
@@ -30738,7 +32321,8 @@
 	 *
 	 * @property {object} features
 	 *
-	 * @property {object} opts
+	 * @property {GridTable~CtorOpts} opts
+	 * Additional options for the renderer.
 	 *
 	 * @property {Timing} timing
 	 *
@@ -30764,7 +32348,8 @@
 		underscore.defaults(self.opts, {
 			drawInternalBorders: true,
 			zebraStriping: true,
-			generateCsv: true
+			generateCsv: true,
+			stealGridFooter: true
 		});
 	});
 
@@ -30829,7 +32414,7 @@
 	 * @event GridTable#renderEnd
 	 */
 
-	mixinEventHandling(GridTable, 'GridTable', [
+	mixinEventHandling(GridTable, [
 			'columnResize'        // A column is resized.
 		, 'unableToRender'      // A grid table can't render the data in the view it's bound to.
 		, 'limited'             // The grid table isn't rendering all possible rows.
@@ -30971,9 +32556,38 @@
 
 	// #setAlignment {{{2
 
+	/**
+	 * Set the alignment on a table cell.
+	 *
+	 * @param {HTMLElement} elt
+	 * The element to set alignment on.
+	 *
+	 * @param {Grid~FieldColConfig} [fcc]
+	 * Column configuration for the field that this cell is based on.
+	 *
+	 * @param {Grid~FieldTypeInfo} [fti]
+	 * Type information for the field that this cell is based on.
+	 *
+	 * @param {string} [overrideType]
+	 * Override the type of the field, used when an aggregate function produces a result with a
+	 * different type than the source field (e.g. distinctValues of a date produces a string, not a
+	 * date, so `overrideType` should be "string").
+	 *
+	 * @param {string} [fallback]
+	 * Fallback default alignment when no alignment is determined by DataVis.
+	 */
+
 	GridTable.prototype.setAlignment = function (elt, fcc, fti, overrideType, fallback) {
 		fcc = fcc || {};
 		fti = fti || {};
+
+		if (elt instanceof jQuery) {
+			elt = elt.get(0);
+		}
+
+		if (!(elt instanceof Element)) {
+			throw new Error('Call Error: `elt` must be an instance of Element');
+		}
 
 		var type = overrideType || fti.type;
 		var alignment = fcc.cellAlignment || fallback;
@@ -30984,26 +32598,21 @@
 
 		switch (alignment) {
 		case 'left':
-			elt.addClass('wcdvgrid_textLeft');
+			elt.classList.add('wcdvgrid_textLeft');
 			break;
-
 		case 'right':
-			elt.addClass('wcdvgrid_textRight');
+			elt.classList.add('wcdvgrid_textRight');
 			break;
-
 		case 'center':
-			elt.addClass('wcdvgrid_textCenter');
+			elt.classList.add('wcdvgrid_textCenter');
 			break;
-
 		case 'justify':
-			elt.addClass('wcdvgrid_textJustify');
+			elt.classList.add('wcdvgrid_textJustify');
 			break;
-
 		default:
-			// We don't have a class for every possible value, so just set the style rule on the
-			// element in those cases.
-
-			elt.css('text-align', alignment);
+			// We don't have a class for every possible value, so just set the style rule on the element in
+			// those cases.  This should be extremely rare, given what we've covered above.
+			elt.style.setProperty('text-align', alignment);
 		}
 	};
 
@@ -31036,10 +32645,17 @@
 			return;
 		}
 
+		if (['horizontal', 'vertical'].indexOf(orientation) < 0) {
+			throw new Error('Call Error: `orientation` must be "horizontal" or "vertical"');
+		}
+		if (!(container instanceof Element)) {
+			throw new Error('Call Error: `container` must be an Element');
+		}
+
 		var sortIcon_orientationClass = 'wcdv_sort_icon_' + orientation;
 
 		/**
-		 * @param {Element|jQuery} span
+		 * @param {Element} span
 		 * The sort indicator span to replace.
 		 *
 		 * @param {string} [dir]
@@ -31047,33 +32663,43 @@
 		 */
 
 		var replaceSortIndicator = function (span, dir) {
-			if (!(span instanceof jQuery || span instanceof Element)) {
-				throw new Error('Call Error: `span` must be either an Element or a jQuery');
+			if (!(span instanceof Element)) {
+				throw new Error('Call Error: `span` must be an Element');
+			}
+			if (dir != null) {
+				if (!underscore.isString(dir)) {
+					throw new Error('Call Error: `dir` must be null or a string');
+				}
+				else if (dir.toUpperCase() !== 'ASC' && dir.toUpperCase() !== 'DESC') {
+					throw new Error('Call Error: `dir` must be either "ASC" or "DESC"');
+				}
 			}
 
-			if (dir != null && !underscore.isString(dir)) {
-				throw new Error('Call Error: `dir` must be a string');
-			}
-			else if (dir != null && dir.toUpperCase() !== 'ASC' && dir.toUpperCase() !== 'DESC') {
-				throw new Error('Call Error: `dir` must be either "ASC" or "DESC"');
-			}
+			var th = container.closest('th');
 
-			if (span instanceof Element) {
-				span = jQuery(span);
+			for (var i = 0; i < span.children.length; i += 1) {
+				span.children[i].classList.remove('wcdv_sort_arrow_active');
 			}
-
-			span.children().removeClass('wcdv_sort_arrow_active');
-			container.closest('th').removeClass('wcdv_sort_column_active wcdv_bg-primary');
+			th.classList.remove('wcdv_sort_column_active');
+			th.classList.remove('wcdv_bg-primary');
 
 			if (dir != null) {
-				container.closest('th').addClass('wcdv_sort_column_active wcdv_bg-primary');
+				th.classList.add('wcdv_sort_column_active');
+				th.classList.add('wcdv_bg-primary');
 
 				// Yes, this is backwards.  The FontAwesome icon for "ascending" points upwards, but I want to
 				// color the one that points dowards, indicating that is the direction of increasing values.
 
-				span.children().removeClass('wcdv_sort_arrow_active');
-				span.children('.fa-sort-desc').addClass('wcdv_sort_arrow_' + (dir.toUpperCase() === 'ASC' ? 'active' : 'inactive'));
-				span.children('.fa-sort-asc').addClass('wcdv_sort_arrow_' + (dir.toUpperCase() === 'DESC' ? 'active' : 'inactive'));
+				for (var i = 0; i < span.children.length; i += 1) {
+					var child = span.children[i];
+					child.classList.remove('wcdv_sort_arrow_active');
+					if (child.classList.contains('fa-sort-desc')) {
+						child.classList.add('wcdv_sort_arrow_' + (dir.toUpperCase() === 'ASC' ? 'active' : 'inactive'));
+					}
+					if (child.classList.contains('fa-sort-asc')) {
+						child.classList.add('wcdv_sort_arrow_' + (dir.toUpperCase() === 'DESC' ? 'active' : 'inactive'));
+					}
+				}
 			}
 		};
 
@@ -31116,31 +32742,44 @@
 			self.view.setSort(sortSpec, self.makeProgress('Sort'));
 		};
 
-		var sortIcon_class = gensym();
-		var sortIcon_span = fontAwesome('fa-stack', orientation === 'horizontal' ? 'fa-rotate-270' : null)
-			.addClass(sortIcon_class)
-			.addClass(sortIcon_orientationClass)
-			.addClass('wcdv_sort_icon');
-
 		// Set the sort direction in the arrow icon.  The way we do this is by building a single
 		// FontAwesome "stack" from the up and down carets.  Then we can style the one we want.
 
-		jQuery('<span>').addClass('fa fa-sort-asc fa-stack-1x').appendTo(sortIcon_span);
-		jQuery('<span>').addClass('fa fa-sort-desc fa-stack-1x').appendTo(sortIcon_span);
+		var ascArrow = document.createElement('span');
+		ascArrow.classList.add('fa');
+		ascArrow.classList.add('fa-sort-asc');
+		ascArrow.classList.add('fa-stack-1x');
+
+		var descArrow = document.createElement('span');
+		descArrow.classList.add('fa');
+		descArrow.classList.add('fa-sort-desc');
+		descArrow.classList.add('fa-stack-1x');
+
+		var sortIcon_class = gensym();
+
+		var sortIcon_span = fontAwesome('fa-stack', orientation === 'horizontal' ? 'fa-rotate-270' : null).get(0);
+		sortIcon_span.classList.add(sortIcon_class);
+		sortIcon_span.classList.add(sortIcon_orientationClass);
+		sortIcon_span.classList.add('wcdv_sort_icon');
+		sortIcon_span.appendChild(ascArrow);
+		sortIcon_span.appendChild(descArrow);
 
 		var sortIcon_menu_items = {};
 
-		if (spec.field != null || spec.groupFieldIndex != null) {
+		if (spec.field != null || spec.groupFieldIndex != null || spec.pivotFieldIndex != null) {
 
 			// We're sorting by a field.  This can occur in these situations:
 			//
 			//   1. Sorting plain output by any column.
-			//   2. Sorting group output by a field that we've grouped by.
+			//   2. Sorting group/pivot output by a field that we've grouped by.
+			//   3. Sorting pivot output by a field that we've pivotted by.
 
 			var name = spec.field != null
 				? spec.field
 				: spec.groupFieldIndex != null
 				? data.groupFields[spec.groupFieldIndex]
+				: spec.pivotFieldIndex != null
+				? data.pivotFields[spec.pivotFieldIndex]
 				: 'Unknown'
 			;
 
@@ -31209,6 +32848,7 @@
 
 		var sortIcon_menu = jQuery.contextMenu({
 			selector: '.' + sortIcon_class,
+			appendTo: self.ui.contextMenus,
 			trigger: 'left',
 			callback: function (itemKey, opt) {
 				console.log(itemKey);
@@ -31218,7 +32858,7 @@
 
 		self.contextMenuSelectors.push('.' + sortIcon_class);
 
-		container.append(sortIcon_span);
+		container.appendChild(sortIcon_span);
 
 		// Now check the existing sort specification in the view to see if any of the sort icons that we
 		// just created should be lit up.
@@ -31304,17 +32944,19 @@
 
 			if (rowValIndex != null) {
 				underscore.each(data.rowVals[rowValIndex], function (x, i) {
-					filter[data.groupFields[i]] = {
-						'$eq': x
-					};
+					var gs = data.groupSpec[i];
+					filter[data.groupFields[i]] = gs.fun != null
+						? GROUP_FUNCTION_REGISTRY.get(gs.fun).valueToFilter(x)
+						: { '$eq': x };
 				});
 			}
 
 			if (colValIndex != null) {
 				underscore.each(data.colVals[colValIndex], function (x, i) {
-					filter[data.pivotFields[i]] = {
-						'$eq': x
-					};
+					var ps = data.pivotSpec[i];
+					filter[data.pivotFields[i]] = ps.fun != null
+						? GROUP_FUNCTION_REGISTRY.get(ps.fun).valueToFilter(x)
+						: { '$eq': x };
 				});
 			}
 
@@ -31330,7 +32972,7 @@
 	// #_addDrillDownClass {{{2
 
 	GridTable.prototype._addDrillDownClass = function (elt) {
-		elt.addClass('wcdv_drill_down');
+		elt.classList.add('wcdv_drill_down');
 	};
 
 	// #addSortHandler {{{2
@@ -31469,6 +33111,133 @@
 		return ai;
 	};
 
+	// #_setupFullValueWin {{{2
+
+	/**
+	 * Setup the behavior to show the full value of a cell when it's been truncated due to having the
+	 * `maxHeight` property set in the column config.
+	 *
+	 * For plain output, you need to set:
+	 *
+	 *   - `data-row-num` on the TR
+	 *   - `data-wcdv-field` on the TD
+	 *
+	 * For group & pivot output, you need to set:
+	 *
+	 *   - `data-rowval-index` on the TR (for group & cell aggregates)
+	 *   - `data-colval-index` on the TD (for pivot & cell aggregates)
+	 *   - `data-wcdv-agg-scope` on the TD
+	 *   - `data-wcdv-agg-num` on the TD
+	 */
+
+	GridTable.prototype._setupFullValueWin = function (data) {
+		var self = this;
+
+		// Create a window that will show the full value of a cell whose display has been truncated by
+		// setting the `maxHeight` property in the column configuration.
+
+		var fullValueWinDiv = document.createElement('div');
+
+		var fullValueWinEffect = {
+			effect: 'fade',
+			duration: 100
+		};
+
+		var fullValueWin = jQuery('<div>', { title: 'Full Value' }).dialog({
+			autoOpen: false,
+			modal: true,
+			width: 800,
+			maxHeight: 600,
+			classes: {
+				"ui-dialog": "ui-corner-all wcdv_dialog",
+				"ui-dialog-titlebar": "ui-corner-all",
+			},
+			show: fullValueWinEffect,
+			hide: fullValueWinEffect,
+		});
+
+		fullValueWin.append(fullValueWinDiv);
+
+		// When the "show full value" button is clicked, use the attached data attributes to determine the
+		// value that will be shown in the window.
+
+		self.ui.tbody.on('click', 'button.wcdv_show_full_value', function (evt) {
+			evt.stopPropagation();
+
+			var btn = jQuery(this);
+			var td = btn.parents('td');
+			var tr = td.parents('tr');
+
+			var field
+				, rowNum
+				, rvi
+				, cvi
+				, aggScope
+				, aggNum
+				, aggInfo
+				, aggResult
+				, val;
+
+			if (data.isPlain) {
+				field = td.attr('data-wcdv-field');
+				rowNum = +tr.attr('data-row-num');
+				val = getProp(data, 'data', rowNum, 'rowData', field, 'cachedRender');
+				setElement(fullValueWinDiv, val);
+			}
+			else if (data.isGroup || data.isPivot) {
+				aggScope = td.attr('data-wcdv-agg-scope');
+				aggNum = +td.attr('data-wcdv-agg-num');
+
+				switch (aggScope) {
+				case 'cell':
+					rvi = +tr.attr('data-rowval-index');
+					cvi = +td.attr('data-colval-index');
+					aggResult = data.agg.results[aggScope][aggNum][rvi][cvi];
+					break;
+				case 'group':
+					rvi = +tr.attr('data-rowval-index');
+					aggResult = data.agg.results[aggScope][aggNum][rvi];
+					break;
+				case 'pivot':
+					cvi = +td.attr('data-colval-index');
+					aggResult = data.agg.results[aggScope][aggNum][cvi];
+					break;
+				case 'all':
+					aggResult = data.agg.results[aggScope][aggNum];
+					break;
+				}
+
+				aggInfo = data.agg.info[aggScope][aggNum];
+				field = getProp(aggInfo, 'fields', 0);
+
+				if (isElement(aggResult)) {
+					setElement(fullValueWinDiv, aggResult);
+				}
+				else {
+					if (aggInfo.instance.inheritFormatting) {
+						val = format(aggInfo.colConfig[0], aggInfo.typeInfo[0], aggResult, {
+							overrideType: aggInfo.instance.getType()
+						});
+						setElement(fullValueWinDiv, val, {
+							field: aggInfo.fields[0],
+							colConfig: aggInfo.colConfig[0],
+							typeInfo: aggInfo.typeInfo[0]
+						});
+					}
+					else {
+						val = format(null, null, aggResult, {
+							overrideType: aggInfo.instance.getType(),
+							convert: false
+						});
+						setElement(fullValueWinDiv, val);
+					}
+				}
+			}
+
+			fullValueWin.dialog('open');
+		});
+	};
+
 	// #draw {{{2
 
 	GridTable.prototype.draw = function (root, opts, cont) {
@@ -31478,6 +33247,14 @@
 			if (!ok) {
 				return cont();
 			}
+
+			// Configuration for floating header feature.
+
+			if (!self.features.floatingHeader || self.defn.table.floatingHeader.method !== 'tabletool') {
+				root.css({ 'overflow-x': 'auto' });
+			}
+
+			// Configuration for limit feature.
 
 			if (self.features.limit && self.defn.table.limit.method === 'more') {
 				self.scrollEventElement = self.opts.fixedHeight ? self.root : window;
@@ -31497,7 +33274,8 @@
 				tfoot: jQuery('<tfoot>'),
 				thMap: {},
 				tr: {},
-				progress: jQuery('<div>')
+				progress: jQuery('<div>'),
+				contextMenus: jQuery('<div>')
 			};
 
 			self._addDrillDownHandler(self.ui.tbl, data);
@@ -31516,6 +33294,8 @@
 						.append(self.ui.progress);
 				}
 			}
+
+			self.ui.contextMenus.appendTo(document.body);
 
 			self.view.on(View.events.workBegin, function () {
 				if (self.features.block) {
@@ -31561,15 +33341,6 @@
 			 */
 
 			var columns = determineColumns(self.colConfig, data, typeInfo);
-			var numCols = columns.length;
-
-			if (self.features.rowSelect) {
-				numCols += 1; // Add a column for the row selection checkbox.
-			}
-
-			if (self.features.rowReorder) {
-				numCols += 1; // Add a column for the reordering button.
-			}
 
 			self.drawHeader(columns, data, typeInfo, opts);
 
@@ -31602,7 +33373,7 @@
 
 			self.ui.tbl.append(self.ui.thead);
 
-			if (!getProp(self.defn, 'table', 'incremental', 'appendBodyLast')) {
+			if (self.features.incremental && !getProp(self.defn, 'table', 'incremental', 'appendBodyLast')) {
 				self.ui.tbl.append(self.ui.tbody);
 
 				if (self.features.footer) {
@@ -31620,7 +33391,7 @@
 			 */
 
 			self.drawBody(data, typeInfo, columns, function () {
-				if (getProp(self.defn, 'table', 'incremental', 'appendBodyLast')) {
+				if (!self.features.incremental || getProp(self.defn, 'table', 'incremental', 'appendBodyLast')) {
 					self.ui.tbl.append(self.ui.tbody);
 
 					if (self.features.footer) {
@@ -31641,34 +33412,77 @@
 					var floatTheadConfig = {
 						zIndex: 1
 					};
+
 					if (self.opts.fixedHeight) {
 						floatTheadConfig.position = 'fixed';
 						floatTheadConfig.scrollContainer = true;
-						self.grid.on(Grid.events.showControls, function () {
-							self.ui.tbl.floatThead('reflow');
-						}, { who: self });
-						self.grid.on(Grid.events.hideControls, function () {
-							self.ui.tbl.floatThead('reflow');
-						}, { who: self });
-						self.grid.filterControl.on(['fieldAdded', 'fieldRemoved'], function () {
-							self.ui.tbl.floatThead('reflow');
-						}, { who: self });
-						self.grid.aggregateControl.on(['fieldAdded', 'fieldRemoved'], function () {
-							self.ui.tbl.floatThead('reflow');
-						}, { who: self });
 					}
+					else {
+						floatTheadConfig.responsiveContainer = function () {
+							return self.root;
+						};
+					}
+
+					self.grid.on('showControls', function () {
+						self.ui.tbl.floatThead('reflow');
+					}, { who: self });
+					self.grid.on('hideControls', function () {
+						self.ui.tbl.floatThead('reflow');
+					}, { who: self });
+					self.grid.filterControl.on(['fieldAdded', 'fieldRemoved'], function () {
+						self.ui.tbl.floatThead('reflow');
+					}, { who: self });
+					self.grid.aggregateControl.on(['fieldAdded', 'fieldRemoved'], function () {
+						self.ui.tbl.floatThead('reflow');
+					}, { who: self });
+
 					self.ui.tbl.floatThead(floatTheadConfig);
 					break;
 				case 'tabletool':
 					if (self.opts.fixedHeight) {
 						self.ui.tbl.attr('data-tttype', 'fixed');
+						self.ui.tbl.attr('data-ttheight', self.grid.rootHeight);
 					}
 					else {
 						self.ui.tbl.attr('data-tttype', 'sticky');
 					}
+					if (data.isPlain) {
+						var pinnedColumns = 0;
+						underscore.each(columns, function (field) {
+							var fcc = self.colConfig.get(field);
+							if (fcc != null && fcc.isPinned) {
+								pinnedColumns += 1;
+							}
+						});
+						if (pinnedColumns > 0) {
+							if (self.features.rowSelect) {
+								pinnedColumns += 1;
+							}
+							self.ui.tbl.attr('data-tttype', 'sidescroll');
+							self.ui.tbl.attr('data-ttsidecells', pinnedColumns);
+						}
+					}
+					else if ((data.isGroup || data.isPivot) && getProp(self.defn, 'table', 'whenGroup', 'pinRowvals')) {
+						self.ui.tbl.attr('data-tttype', 'sidescroll');
+						self.ui.tbl.attr('data-ttsidecells', data.groupFields.length);
+					}
 					break;
 				}
 			}
+
+			// This isn't fast or reliable but it is one way to get rid of excess "show full value" buttons
+			// if the cell doesn't actually get cut off.  It's fine for small numbers of cells, but once you
+			// get over like 1000 cells it's going to take a while.  Plus, it technically needs to be rerun
+			// whenever the table size changes.  I just want to leave it here in case I need it later.
+
+			// jQuery(self.ui.tbody).find('div.wcdv_maxheight_wrapper').each(function (i, elt) {
+			// 	var s = window.getComputedStyle(elt);
+			// 	var height = s.height.slice(0, -2);
+			// 	var maxHeight = s.maxHeight.slice(0, -2);
+			// 	if (+height < +maxHeight) {
+			// 		jQuery(elt).children('button.wcdv_show_full_value').hide();
+			// 	}
+			// });
 
 			self.addWorkHandler();
 
@@ -31722,12 +33536,16 @@
 				}
 			}
 			self.csv.addCol(text);
-			self._addSortingToHeader(data, 'vertical', {aggType: 'group', aggNum: aggNum}, headingThControls, ai.group);
+			self._addSortingToHeader(data, 'vertical', {aggType: 'group', aggNum: aggNum}, headingThControls.get(0), ai.group);
 			self.setAlignment(th, aggInfo.colConfig[0], aggInfo.typeInfo[0], aggInfo.instance.getType());
 		});
 	};
 
 	// #drawHeader_addCols {{{2
+
+	/**
+	 * Add user-defined columns to the header.
+	 */
 
 	GridTable.prototype.drawHeader_addCols = function (tr, typeInfo, opts) {
 		var self = this;
@@ -31737,10 +33555,21 @@
 			underscore.each(self.opts.addCols, function (addCol) {
 				span = jQuery('<span>')
 					.text(addCol.name);
+
 				th = jQuery('<th>')
 					.append(span)
 					.appendTo(tr);
+
 				self.csv.addCol(addCol.name);
+
+				// When the added column is an aggregate function over some field, we can use that information
+				// to look up the colConfig and typeInfo of the field to determine the alignment.  For example
+				// if the aggregate is Max(Age) we can look up Age and find it's a number and therefore should
+				// be right-aligned.
+				//
+				// TODO Implement this for the aggregate type as well, as aggregates like Sum() only produce
+				// numbers which should be right-aligned.
+
 				if (getProp(opts, 'pivotConfig', 'aggField')) {
 					self.setAlignment(th, self.colConfig.get(opts.pivotConfig.aggField), typeInfo.get(opts.pivotConfig.aggField));
 				}
@@ -31760,12 +33589,20 @@
 	 * @param {Element} tr
 	 * The row to attach the TH elements to.
 	 *
-	 * @param {number} groupNum
+	 * @param {number} rowValIndex
 	 * What group number you want to print out.
 	 */
 
-	GridTable.prototype.drawBody_rowVals = function (data, tr, groupNum) {
+	GridTable.prototype.drawBody_rowVals = function (data, tr, rowValIndex) {
 		var self = this;
+
+		if (!(tr instanceof Element)) {
+			throw new Error('Call Error: `tr` must be an instance of Element');
+		}
+
+		if (typeof rowValIndex !== 'number') {
+			throw new Error('Call Error: `rowValIndex` must be a number');
+		}
 
 		// Create the cells that show the values of the grouped columns.
 		//
@@ -31781,46 +33618,117 @@
 		//   ... row[col] | col ∉ groupFields ...
 		// </tr>
 
-		underscore.each(data.rowVals[groupNum], function (rowVal, rowValIndex) {
-			var groupField = data.groupFields[rowValIndex];
+		var leafMetadataNode = data.groupMetadata.lookup.byRowValIndex[rowValIndex];
+		var metadataNode = leafMetadataNode;
+		var th = [];
+		var i;
+
+		// Iterate through the group fields from last to first, navigating through the group metadata tree
+		// from leaf (last group field) to root (first group field).  Along the way, construct the <TH>
+		// elements for the rowval elements in reverse order.
+
+		for (i = data.groupFields.length - 1; i >= 0; i -= 1) {
+			var groupField = data.groupFields[i];
+			var groupSpec = data.groupSpec[i];
 			var fcc = self.colConfig.get(groupField) || {};
+			var t = self.typeInfo.get(groupField);
+			var v = metadataNode.rowValCell || metadataNode.rowValElt;
 
-			rowVal = format(fcc, self.typeInfo.get(groupField), rowVal);
+			if (groupSpec.fun != null) {
+				t = {
+					type: GROUP_FUNCTION_REGISTRY.get(groupSpec.fun).resultType
+				};
+				v = metadataNode.rowValElt;
+			}
 
-			var th = jQuery('<th>');
-			var span = jQuery('<span>').addClass('wcdv_heading_title');
+			// The rowValCell is a representative cell that matches the rowValElt.  If there is more than
+			// one rowVal containing the same rowValElt, the rowValCell is shared between them all.  It's
+			// the same representative cell.  Because it's shared, we need to enable `saferCaching` so any
+			// Element produced by a `render` function on the cell doesn't get reused and moved around on
+			// the page.  A good example of this issue can be seen in the allowHtml tests, on the link3 and
+			// link4 fields which use a `render` function to create an <A> element.
+			//
+			// After more difficulty was discovered, `saferCaching` was turned on by default.  This will
+			// have some performance impacts, but until a different way is found to implement this, it's
+			// necessary.
 
-			var headingThControls = jQuery('<div>');
+			v = format(fcc, t, v);
 
-			var headingThContainer = jQuery('<div>')
-				.addClass('wcdv_heading_container')
-				.append(span, headingThControls);
+			// TH (th[i])
+			//   DIV (headingThContainer)
+			//     SPAN (headingThValue)
+			//     DIV (headingThControls)
 
-			if (rowVal instanceof Element || rowVal instanceof jQuery) {
-				span.append(rowVal);
+			var headingThValue = document.createElement('span');
+			headingThValue.classList.add('wcdv_heading_title');
+
+			var headingThControls = document.createElement('div');
+
+			var headingThContainer = document.createElement('div');
+			headingThContainer.classList.add('wcdv_heading_container');
+			headingThContainer.appendChild(headingThValue);
+			headingThContainer.appendChild(headingThControls);
+
+			th[i] = document.createElement('th');
+			th[i].appendChild(headingThContainer);
+
+			if (v instanceof jQuery) {
+				v = v.get(0);
+			}
+
+			if (v instanceof Element) {
+				headingThValue.appendChild(v);
 			}
 			else if (fcc.allowHtml) {
-				span.html(rowVal);
+				headingThValue.innerHTML = v;
 			}
 			else {
-				span.text(rowVal);
+				headingThValue.innerText = v;
 			}
 
-			headingThContainer.appendTo(th);
-			th.appendTo(tr);
-			self.csv.addCol(span.text());
+			self.csv.addCol(headingThValue.innerText, {
+				prepend: true
+			});
 
-			if (data.isPivot && rowValIndex === data.groupFields.length - 1) {
-				self._addSortingToHeader(data, 'horizontal', {rowVal: data.rowVals[groupNum], aggNum: 0}, headingThControls, getPropDef([], data, 'agg', 'info', 'cell'));
+			if (data.isPivot && i === data.groupFields.length - 1) {
+				self._addSortingToHeader(data, 'horizontal', {rowVal: data.rowVals[rowValIndex], aggNum: 0}, headingThControls, getPropDef([], data, 'agg', 'info', 'cell'));
 			}
-		});
+
+			metadataNode = metadataNode.parent;
+		}
+
+		for (i = 0; i < data.groupFields.length; i += 1) {
+			tr.appendChild(th[i]);
+		}
 	};
 
 	// #drawBody_groupAggregates {{{2
 
+	/**
+	 * Render the group aggregate results in a row.
+	 *
+	 * @param {any} data
+	 *
+	 * @param {Element} tr
+	 * Row to which we add the group aggregate results.
+	 *
+	 * @param {number} groupNum
+	 * Group number (a.k.a. the rowVal index) to render the aggregate results for.
+	 *
+	 * @param {number} displayOrderIndex
+	 * What position we're rendering the group aggregate results in.  When greater than zero, draw a
+	 * left border.
+	 *
+	 * @param {number} displayOrderMax
+	 * The max number of positions for rendering data.  When this isn't the last thing rendered, draw a
+	 * right border.
+	 */
+
 	GridTable.prototype.drawBody_groupAggregates = function (data, tr, groupNum, displayOrderIndex, displayOrderMax) {
 		var self = this;
 		var ai = self._getAggInfo(data);
+
+		// Go through all the group aggregates and create columns for each one in the specified row.
 
 		underscore.each(ai.group, function (aggInfo, aggGroupIndex) {
 			var aggNum = aggInfo.aggNum;
@@ -31828,39 +33736,67 @@
 			var aggResult = data.agg.results.group[aggNum][groupNum];
 			var text;
 
-			if (aggInfo.instance.inheritFormatting) {
-				text = format(aggInfo.colConfig[0], aggInfo.typeInfo[0], aggResult, {
-					overrideType: aggType
-				});
+			var td = document.createElement('td');
+			td.setAttribute('data-rowval-index', groupNum);
+			td.setAttribute('data-wcdv-agg-scope', 'group');
+			td.setAttribute('data-wcdv-agg-num', aggNum);
+
+			if (aggResult instanceof jQuery) {
+				aggResult = aggResult.get(0);
+			}
+
+			if (aggResult instanceof Element) {
+				td.appendChild(aggResult);
+				self.csv.addCol(getElement(aggResult).innerText);
 			}
 			else {
-				text = format(null, null, aggResult, {
-					overrideType: aggType,
-					convert: false
-				});
+				if (aggInfo.instance.inheritFormatting) {
+					text = format(aggInfo.colConfig[0], aggInfo.typeInfo[0], aggResult, {
+						overrideType: aggType
+					});
+					setTableCell(td, text, {
+						field: aggInfo.fields[0],
+						colConfig: aggInfo.colConfig[0],
+						typeInfo: aggInfo.typeInfo[0]
+					});
+					td.setAttribute('data-wcdv-field', aggInfo.fields[0]);
+				}
+				else {
+					text = format(null, null, aggResult, {
+						overrideType: aggType,
+						convert: false
+					});
+					setTableCell(td, text);
+				}
+				self.csv.addCol(td.innerText);
 			}
 
-			var td = jQuery('<td>').text(text).attr({
-				'data-rowval-index': groupNum
-			});
+			// Allow drilldown, but only when there's no group function set.  This limitation is currently
+			// in place because we lack the ability to set filters that match all group functions' results.
+			// For example, day of week, because we can't filter to show "only Mondays."
 
-			self._addDrillDownClass(td);
+			if (underscore.every(data.groupSpec, function (gs) {
+				return gs.fun == null || GROUP_FUNCTION_REGISTRY.get(gs.fun).canFilter
+			})) {
+				self._addDrillDownClass(td);
+			}
+
+			// Decide how we should draw borders based on the display order index & max.
 
 			if (self.opts.drawInternalBorders || data.agg.info.group.length > 1) {
 				if (displayOrderIndex > 0 && aggGroupIndex === 0) {
-					td.addClass('wcdv_bld'); // border-left: double
+					td.classList.add('wcdv_bld'); // border-left: double
 				}
 				if (displayOrderIndex < displayOrderMax - 1 && aggGroupIndex === ai.group.length - 1) {
-					td.addClass('wcdv_brd'); // border-right: double
+					td.classList.add('wcdv_brd'); // border-right: double
 				}
 				if (aggGroupIndex > 0) {
-					td.addClass('wcdv_pivot_colval_boundary');
+					td.classList.add('wcdv_pivot_colval_boundary');
 				}
 			}
 
-			self.csv.addCol(text);
 			self.setAlignment(td, aggInfo.colConfig[0], aggInfo.typeInfo[0], aggInfo.instance.getType());
-			td.appendTo(tr);
+			tr.appendChild(td);
 		});
 	};
 
@@ -31873,6 +33809,12 @@
 	GridTable.prototype.clear = function () {
 		var self = this;
 
+		if (getProp(self, 'ui', 'contextMenus') != null) {
+			self.ui.contextMenus.remove();
+		}
+
+		debug.info('GRID TABLE // CLEAR', 'Removing %d context menus', self.contextMenuSelectors.length);
+
 		underscore.each(self.contextMenuSelectors, function (sel) {
 			jQuery.contextMenu('destroy', sel);
 		});
@@ -31881,6 +33823,12 @@
 
 		if (self.features.limit && self.defn.table.limit.method === 'more') {
 			jQuery(self.scrollEventElement).off(self.scrollEvents);
+		}
+
+		// Remove the event handler from clicking on the "show full value" buttons.
+
+		if (getProp(self, 'ui', 'tbody') != null) {
+			self.ui.tbody.off('click', 'button.wcdv_show_full_value');
 		}
 
 		self.view.off('*', self, {silent: true});
@@ -31910,7 +33858,7 @@
 					}
 				},
 				update: function (amount, estTotal) {
-					debug.info('GRID TABLE - PLAIN // PROGRESS (' + thing + ')', sprintf.sprintf('Update: %d / %d = %.0f%%', amount, estTotal, (amount / estTotal) * 100));
+					debug.info('GRID TABLE - PLAIN // PROGRESS (' + thing + ')', sprintf$1.sprintf('Update: %d / %d = %.0f%%', amount, estTotal, (amount / estTotal) * 100));
 					if (window.NProgress !== undefined) {
 						window.NProgress.set(amount / estTotal);
 					}
@@ -31936,7 +33884,7 @@
 					});
 				},
 				update: function (amount, estTotal) {
-					debug.info('GRID TABLE - PLAIN // PROGRESS (' + thing + ')', sprintf.sprintf('Update: %d / %d = %.0f%%', amount, estTotal, (amount / estTotal) * 100));
+					debug.info('GRID TABLE - PLAIN // PROGRESS (' + thing + ')', sprintf$1.sprintf('Update: %d / %d = %.0f%%', amount, estTotal, (amount / estTotal) * 100));
 					self.ui.progress.progressbar('value', (amount / estTotal) * 100);
 				},
 				end: function () {
@@ -32025,9 +33973,7 @@
 			self._updateSelectionGui();
 		}
 
-		self.fire('selectionChange', null, underscore.map(self.selection, function (i) {
-			return data[i];
-		}));
+		self.fire('selectionChange', null, self.getSelection().rows);
 	};
 
 	// #select {{{2
@@ -32087,9 +34033,7 @@
 			self._updateSelectionGui();
 		}
 
-		self.fire('selectionChange', null, underscore.map(self.selection, function (i) {
-			return data[i];
-		}));
+		self.fire('selectionChange', null, self.getSelection().rows);
 	};
 
 	// #unselect {{{2
@@ -32148,9 +34092,7 @@
 			self._updateSelectionGui();
 		}
 
-		self.fire('selectionChange', null, underscore.map(self.selection, function (i) {
-			return data[i];
-		}));
+		self.fire('selectionChange', null, self.getSelection().rows);
 	};
 
 	// #isSelected {{{2
@@ -32248,6 +34190,8 @@
 	 * @param {View~Data} data
 	 *
 	 * @param {Source~TypeInfo} typeInfo
+	 *
+	 * @param {object} opts
 	 */
 
 	GridTablePlain.prototype.drawHeader = function (columns, data, typeInfo, opts) {
@@ -32347,7 +34291,7 @@
 
 			// In the plain grid table output, the only way to sort is vertically by field.
 
-			self._addSortingToHeader(data, 'vertical', {field: field}, headingThControls);
+			self._addSortingToHeader(data, 'vertical', {field: field}, headingThControls.get(0));
 
 			self._addFilterToHeader(headingThControls, field, headingText);
 
@@ -32430,6 +34374,10 @@
 			headingTr.append(headingTh);
 		});
 
+		if (self.opts.addCols) {
+			self.drawHeader_addCols(headingTr, typeInfo, opts);
+		}
+
 		/*
 		 * Create a column with buttons that allows the user to reorder the rows.
 		 */
@@ -32478,6 +34426,134 @@
 
 		self.ui.tbody.children().remove();
 
+		self._setupFullValueWin(data);
+
+		var renderDataRow = function (row) {
+			var tr, td;
+
+			tr = document.createElement('tr');
+			tr.setAttribute('id', self.defn.table.id + '_' + row.rowNum);
+			tr.setAttribute('data-row-num', row.rowNum);
+
+			// Create the check box which selects the row.
+
+			if (self.features.rowSelect) {
+				var checkbox = jQuery('<input>', {
+					'type': 'checkbox',
+					'data-row-num': row.rowNum,
+				});
+				td = jQuery('<td>').addClass('wcdv_group_col_spacer').append(checkbox).appendTo(tr);
+				if (self.opts.drawInternalBorders) {
+					td.addClass('wcdv_pivot_colval_boundary');
+				}
+			}
+
+			// Create the data cells.
+
+			underscore.each(columns, function (field, colIndex) {
+				var fcc = self.colConfig.get(field) || {};
+				var cell = row.rowData[field];
+
+				var td = document.createElement('td');
+				var value = format(fcc, typeInfo.get(field), cell);
+
+				setTableCell(td, value, {
+					field: field,
+					colConfig: self.colConfig,
+					typeInfo: typeInfo
+				});
+
+				if (fcc.maxHeight != null) {
+					td.setAttribute('data-wcdv-field', field);
+				}
+
+				self.setCss(jQuery(td), field);
+				self.setAlignment(td, fcc, typeInfo.get(field));
+
+				if (self.opts.drawInternalBorders) {
+					td.classList.add('wcdv_pivot_colval_boundary');
+				}
+
+				tr.appendChild(td);
+			});
+
+			if (self.opts.addCols) {
+				underscore.each(self.opts.addCols, function (addColSpec) {
+					var value = addColSpec.value(row.rowData, row.rowNum);
+					var td = document.createElement('td');
+
+					if (!(value instanceof jQuery || value instanceof Element)) {
+						value = format(null, null, value);
+					}
+
+					setTableCell(td, value);
+
+					if (self.opts.drawInternalBorders) {
+						td.classList.add('wcdv_pivot_colval_boundary');
+					}
+
+					tr.appendChild(td);
+				});
+			}
+
+			// Create button used as the "handle" for dragging/dropping rows.
+
+			if (self.features.rowReorder) {
+				jQuery('<td>').append(self.makeRowReorderBtn()).appendTo(tr);
+			}
+
+			self.ui.tr[row.rowNum] = jQuery(tr);
+			self.ui.tbody.append(tr);
+		};
+
+		var renderShowMore = function (rowNum) {
+			var tr;
+
+			tr = document.createElement('tr');
+			tr.classList.add('wcdvgrid_more');
+
+			var colSpan = columns.length
+				+ (self.features.rowSelect ? 1 : 0)
+				+ (getPropDef(0, self.opts, 'addCols', 'length'))
+				+ (self.features.rowReorder ? 1 : 0);
+
+			var showMore = function () {
+				tr.parentNode.removeChild(tr); // Eliminate the "more" row.
+				render(rowNum + 1, limitConfig.chunkSize, nextChunk);
+			};
+
+			var td = jQuery('<td>', {
+				colspan: colSpan
+			})
+				.on('click', showMore)
+				.append(fontAwesome('F13A'))
+				.append(jQuery('<span>Showing rows '
+												+ '1–'
+												+ (rowNum + 1)
+												+ ' of '
+												+ data.data.length
+												+ '.</span>')
+									.css({
+									'padding-left': '0.5em',
+								}))
+				.append(jQuery('<span>Click to load ' + limitConfig.chunkSize + ' more rows.</span>')
+								.css({
+									'padding-left': '0.5em',
+									'padding-right': '0.5em'
+								}))
+				.append(fontAwesome('F13A'));
+
+			self.moreVisibleHandler = onVisibilityChange(self.scrollEventElement, td, function(isVisible) {
+				if (isVisible && getProp(self.defn, 'table', 'limit', 'autoShowMore')) {
+					debug.info('GRID TABLE - PLAIN // MORE', '"Show More Rows" button scrolled into view');
+					showMore();
+				}
+			});
+
+			tr.appendChild(td.get(0));
+			self.ui.tbody.append(tr);
+		};
+
 		var render = function (startIndex, howMany, nextChunk) {
 			var atLimit = false;
 
@@ -32501,123 +34577,28 @@
 						: ('/ ' + data.data.length - 1)));
 
 			for (var rowNum = startIndex; rowNum < data.data.length && rowNum < startIndex + howMany && !atLimit; rowNum += 1) {
-				var row = data.data[rowNum];
-				var tr;
+				renderDataRow(data.data[rowNum]);
 
 				if (!self.features.incremental
 						&& useLimit
 						&& limitConfig.method === 'more'
+						&& rowNum !== data.data.length - 1 // [0]
 						&& ((startIndex === 0 && rowNum === limitConfig.threshold - 1) // [1]
 								|| (startIndex > 0 && rowNum === startIndex + limitConfig.chunkSize - 1))) { // [2]
 
+					// Condition [0]: We haven't reached the end of the data.
 					// Condition [1]: We've reached the initial threshold for showing the more button.
 					// Condition [2]: We're showing additional rows because they clicked the more button.
 
+					renderShowMore(rowNum);
 					atLimit = true;
-
-					self.fire('limited');
-
-					tr = jQuery('<tr>').addClass('wcdvgrid_more');
-
-					var colSpan = columns.length
-						+ (self.features.rowSelect ? 1 : 0)
-						+ (self.features.rowReorder ? 1 : 0);
-
-					var showMore = function () {
-						tr.remove(); // Eliminate the "more" row.
-						render(rowNum, limitConfig.chunkSize, nextChunk);
-					};
-
-					var td = jQuery('<td>', {
-						colspan: colSpan
-					})
-						.on('click', showMore)
-						.append(fontAwesome('F13A'))
-						.append(jQuery('<span>Showing rows '
-														+ '1–'
-														+ rowNum
-														+ ' of '
-														+ (data.data.length + 1)
-														+ '.</span>')
-											.css({
-											'padding-left': '0.5em',
-										}))
-						.append(jQuery('<span>Click to load ' + limitConfig.chunkSize + ' more rows.</span>')
-										.css({
-											'padding-left': '0.5em',
-											'padding-right': '0.5em'
-										}))
-						.append(fontAwesome('F13A'));
-
-					self.moreVisibleHandler = onVisibilityChange(self.scrollEventElement, td, function(isVisible$$1) {
-						if (isVisible$$1 && getProp(self.defn, 'table', 'limit', 'autoShowMore')) {
-							debug.info('GRID TABLE - PLAIN // MORE', '"Show More Rows" button scrolled into view');
-							showMore();
-						}
-					});
-
-					tr.append(td);
 				}
-				else {
-					tr = jQuery('<tr>', {id: self.defn.table.id + '_' + rowNum, 'data-row-num': row.rowNum});
-
-					// Create the check box which selects the row.
-
-					if (self.features.rowSelect) {
-						var checkbox = jQuery('<input>', {
-							'type': 'checkbox',
-							'data-row-num': row.rowNum,
-						});
-						td = jQuery('<td>').addClass('wcdv_group_col_spacer').append(checkbox).appendTo(tr);
-						if (self.opts.drawInternalBorders) {
-							td.addClass('wcdv_pivot_colval_boundary');
-						}
-					}
-
-					// Create the data cells.
-
-					underscore.each(columns, function (field, colIndex) {
-						var fcc = self.colConfig.get(field) || {};
-						var cell = row.rowData[field];
-
-						var td = jQuery('<td>');
-						var value = format(fcc, typeInfo.get(field), cell);
-
-						if (value instanceof Element || value instanceof jQuery) {
-							td.append(value);
-						}
-						else if (fcc.allowHtml && typeInfo.get(field).type === 'string') {
-							td.html(value);
-						}
-						else if (value === '') {
-							td.html('&nbsp;');
-						}
-						else {
-							td.text(value);
-						}
-
-						self.setCss(td, field);
-						self.setAlignment(td, fcc, typeInfo.get(field));
-
-						if (self.opts.drawInternalBorders) {
-							td.addClass('wcdv_pivot_colval_boundary');
-						}
-
-						tr.append(td);
-					});
-
-					// Create button used as the "handle" for dragging/dropping rows.
-
-					if (self.features.rowReorder) {
-						tr.append(jQuery('<td>').append(self.makeRowReorderBtn()));
-					}
-				}
-
-				self.ui.tr[rowNum] = tr;
-				self.ui.tbody.append(tr);
 			}
 
-			if (!atLimit) {
+			if (atLimit) {
+				self.fire('limited');
+			}
+			else {
 				self.fire('unlimited');
 			}
 
@@ -32704,20 +34685,28 @@
 
 	GridTablePlain.prototype.drawFooter = function (columns, data, typeInfo) {
 		var self = this;
-		var tr = jQuery('<tr>');
 
-		if (self.features.rowSelect) {
+		var makeSelectAll = function (tr) {
 			self.ui.checkAll_tfoot = jQuery('<input>', { 'name': 'checkAll', 'type': 'checkbox' })
 				.on('change', function (evt) {
 					self.checkAll(evt);
 				});
-			tr.append(jQuery('<td>').append(self.ui.checkAll_tfoot));
-		}
+			jQuery('<td>', {'class': 'wcdv_group_col_spacer'}).append(self.ui.checkAll_tfoot).appendTo(tr);
+		};
 
-		if (self.opts.footer != null && self.opts.stealGridFooter) {
-			jQuery('<td>', {'colspan': columns.length}).appendTo(tr).get(0).appendChild(self.opts.footer.get(0));
-		}
-		else {
+		var makeAggregateRow = function () {
+
+			var tr = jQuery('<tr>');
+
+			// Add the "select all" checkbox when row selection is enabled.
+
+			if (self.features.rowSelect) {
+				makeSelectAll(tr);
+			}
+
+			// Create the columns for the data fields, which contain aggregate function results over those
+			// fields.
+
 			var didFooterCell = false;
 
 			tr.append(underscore.map(columns, function (field, colIndex) {
@@ -32769,35 +34758,40 @@
 					aggResult = aggInfo.instance.calculate(data.data);
 					var aggResult_formatted;
 
-					if (aggInfo.instance.inheritFormatting) {
-						aggResult_formatted = format(aggInfo.colConfig[0], aggInfo.typeInfo[0], aggResult, {
-							overrideType: aggInfo.instance.getType()
-						});
+					if (isElement(aggResult)) {
+						footerVal = aggResult;
 					}
 					else {
-						aggResult_formatted = format(null, null, aggResult, {
-							overrideType: aggInfo.instance.getType(),
-							convert: false
-						});
+						if (aggInfo.instance.inheritFormatting) {
+							aggResult_formatted = format(aggInfo.colConfig[0], aggInfo.typeInfo[0], aggResult, {
+								overrideType: aggInfo.instance.getType()
+							});
+						}
+						else {
+							aggResult_formatted = format(null, null, aggResult, {
+								overrideType: aggInfo.instance.getType(),
+								convert: false
+							});
+						}
+
+						if (aggInfo.debug) {
+							debug.info('GRID TABLE - PLAIN // FOOTER - ' + field, 'Aggregate result: %s',
+								JSON.stringify(aggResult));
+						}
+
+						switch (typeof footerConfig.format) {
+						case 'function':
+							footerVal = footerConfig.format(aggResult_formatted);
+							break;
+						case 'string':
+							footerVal = sprintf$1.sprintf(footerConfig.format, aggResult_formatted);
+							break;
+						default:
+							throw new Error('Footer config for field "' + field + '": `format` must be a function or a string');
+						}
 					}
 
-					if (aggInfo.debug) {
-						debug.info('GRID TABLE - PLAIN // FOOTER - ' + field, 'Aggregate result: %s',
-							JSON.stringify(aggResult));
-					}
-
-					switch (typeof footerConfig.format) {
-					case 'function':
-						footerVal = footerConfig.format(aggResult_formatted);
-						break;
-					case 'string':
-						footerVal = sprintf.sprintf(footerConfig.format, aggResult_formatted);
-						break;
-					default:
-						throw new Error('Footer config for field "' + field + '": `format` must be a function or a string');
-					}
-
-					if (footerVal instanceof Element || footerVal instanceof jQuery) {
+					if (isElement(footerVal)) {
 						td.append(footerVal);
 					}
 					else {
@@ -32807,13 +34801,54 @@
 
 				return td;
 			}));
-		}
 
-		if (self.features.rowReorder) {
-			tr.append(jQuery('<td>').text('Options'));
-		}
+			// ...
 
-		self.ui.tfoot.append(tr);
+			if (self.features.rowReorder) {
+				tr.append(jQuery('<td>').text('Options'));
+			}
+
+			// Finish the row that contains the aggregate functions.
+
+			self.ui.tfoot.append(tr);
+		};
+
+		/*
+		 * Create a row in the footer for an external footer that we've absorbed into the grid.
+		 */
+
+		var makeExternalFooterRow = function () {
+			if (self.opts.footer == null || !self.opts.stealGridFooter) {
+				return;
+			}
+
+			var tr = jQuery('<tr>');
+
+			if (!isVisible(self.opts.footer)) {
+				tr.hide();
+			}
+
+			if (self.features.rowSelect) {
+				// Circumventing the correct logic here because TableTool requires an empty footer in order to
+				// implement horizontal scrolling; if you omit the footer (with a TR and all appropriate TD's
+				// in it) then you can't scroll horizontally.
+				{
+					// There is an aggregate row, so it contains the "select all" checkbox.
+					jQuery('<td>', {'class': 'wcdv_group_col_spacer'}).appendTo(tr);
+				}
+			}
+
+			tr.append(jQuery('<td>', {'colspan': columns.length}).append(self.opts.footer));
+
+			if (self.features.rowReorder) {
+				tr.append(jQuery('<td>'));
+			}
+
+			self.ui.tfoot.append(tr);
+		};
+
+		makeAggregateRow();
+		makeExternalFooterRow();
 	};
 
 	// #makeRowReorderBtn {{{2
@@ -33108,7 +35143,7 @@
 
 		self.super.ctor.apply(self, arguments);
 
-		self.features.footer = false;
+		self.features.sort = false;
 
 		debug.info('GRID TABLE - GROUP - DETAIL', 'Constructing grid table; features = %O', features);
 	});
@@ -33213,7 +35248,7 @@
 				.append(headingThContainer)
 			;
 
-			self._addSortingToHeader(data, 'vertical', {groupFieldIndex: fieldIdx}, headingThControls);
+			self._addSortingToHeader(data, 'vertical', {groupFieldIndex: fieldIdx}, headingThControls.get(0));
 
 			self.setCss(headingTh, field);
 
@@ -33273,7 +35308,7 @@
 				headingTh.addClass('wcdv_pivot_colval_boundary');
 			}
 
-			self._addSortingToHeader(data, 'vertical', {field: field}, headingThControls);
+			self._addSortingToHeader(data, 'vertical', {field: field}, headingThControls.get(0));
 
 			self.setCss(headingTh, field);
 			self.setAlignment(headingTh, fcc, typeInfo.get(field));
@@ -33506,6 +35541,7 @@
 				var expandBtn;
 				var infoText, infoTextSpan;
 				var fcc;
+				var t, v;
 				var rowValElt, rowValEltSpan;
 				var showMoreTd;
 				var colSpan;
@@ -33569,8 +35605,17 @@
 					}
 
 					fcc = self.colConfig.get(childMetadataNode.groupField) || {};
+					t = self.typeInfo.get(childMetadataNode.groupField);
+					v = childMetadataNode.rowValCell || childMetadataNode.rowValElt;
 
-					rowValElt = format(fcc, self.typeInfo.get(childMetadataNode.groupField), childMetadataNode.rowValCell || childMetadataNode.rowValElt);
+					if (childMetadataNode.groupSpec.fun != null) {
+						t = {
+							type: GROUP_FUNCTION_REGISTRY.get(childMetadataNode.groupSpec.fun).resultType
+						};
+						v = childMetadataNode.rowValElt;
+					}
+
+					rowValElt = format(fcc, t, v);
 					rowValEltSpan = jQuery('<span>');
 
 					if (rowValElt instanceof Element || rowValElt instanceof jQuery) {
@@ -33706,9 +35751,13 @@
 						'data-wcdv-rowValIndex': metadataNode.rowValIndex
 					});
 
-					// Spacer to "indent" the data.
+					// Insert some space to "indent" the data.
+					// TODO When does one of these work differently from the other?
 
-					jQuery('<td>', {'colspan': data.groupFields.length + 1}).appendTo(rowTr);
+					//jQuery('<td>', {'colspan': data.groupFields.length + 1}).appendTo(rowTr);
+					for (var spacerIndex = 0; spacerIndex < data.groupFields.length + 1; spacerIndex += 1) {
+						jQuery('<td>', {'class': 'wcdv_group_col_spacer'}).appendTo(rowTr);
+					}
 
 					// Create the check box which selects the row.
 
@@ -33881,6 +35930,176 @@
 		if (typeof cont === 'function') {
 			return cont();
 		}
+	};
+
+	// #drawFooter {{{2
+
+	GridTableGroupDetail.prototype.drawFooter = function (columns, data, typeInfo) {
+		var self = this;
+
+		var makeSelectAll = function (tr) {
+			self.ui.checkAll_tfoot = jQuery('<input>', {
+				'name': 'checkAll',
+				'type': 'checkbox',
+				'class': 'wcdv_select_group',
+				'data-group-id': '0'
+			})
+				.on('change', function (evt) {
+					self.checkAll(evt);
+				});
+			jQuery('<td>', {'class': 'wcdv_group_col_spacer'}).append(self.ui.checkAll_tfoot).appendTo(tr);
+		};
+
+		var makeAggregateRow = function () {
+
+			var tr = jQuery('<tr>');
+
+			// Add the "select all" checkbox when row selection is enabled.
+
+			if (self.features.rowSelect) {
+				makeSelectAll(tr);
+			}
+
+			for (var spacerIndex = 0; spacerIndex < data.groupFields.length + 1; spacerIndex += 1) {
+				jQuery('<td>', {'class': 'wcdv_group_col_spacer'}).appendTo(tr);
+			}
+
+			// Create the columns for the data fields, which contain aggregate function results over those
+			// fields.
+
+			var didFooterCell = false;
+
+			tr.append(underscore.map(columns, function (field, colIndex) {
+				if (data.groupFields.indexOf(field) >= 0) {
+					return;
+				}
+
+				var fcc = self.colConfig.get(field) || {};
+				var colTypeInfo = typeInfo.get(field);
+				var td = jQuery('<td>');
+				var footerConfig = getProp(self.defn, 'table', 'footer', field);
+				var aggResult;
+				var footerVal;
+
+				self.setCss(td, field);
+				self.setAlignment(td, fcc, typeInfo.get(field));
+
+				if (footerConfig == null) {
+					if (didFooterCell) {
+						td.addClass('wcdv_divider');
+					}
+
+					didFooterCell = false;
+				}
+				else {
+					if (colIndex > 0) {
+						td.addClass('wcdv_divider');
+					}
+
+					didFooterCell = true;
+
+					// Although the footer config is an aggregate spec, there is one place we allow more
+					// flexibility.  If the fields aren't set, use the field for the column in which we're
+					// displaying this footer.  This is merely a convenience for the most common case.
+
+					if (footerConfig.fields == null) {
+						footerConfig.fields = [field];
+					}
+
+					debug.info('GRID TABLE - PLAIN // FOOTER - ' + field, 'Creating footer using config: %O', footerConfig);
+
+					var aggInfo = new AggregateInfo('all', footerConfig, 0, self.colConfig, typeInfo, function (tag, fti) {
+						if (fti.needsDecoding) {
+							debug.info('GRID TABLE - PLAIN // FOOTER - ' + field + ' // ' + tag, 'Converting data: { field = "%s", type = "%s" }',
+								fti.field, fti.type);
+
+							self.view.source.convertAll(data.dataByRowId, fti.field);
+						}
+
+						fti.deferDecoding = false;
+						fti.needsDecoding = false;
+					});
+					aggResult = aggInfo.instance.calculate(data.groupMetadata.rows);
+					var aggResult_formatted;
+
+					if (isElement(aggResult)) {
+						footerVal = aggResult;
+					}
+					else {
+						if (aggInfo.instance.inheritFormatting) {
+							aggResult_formatted = format(aggInfo.colConfig[0], aggInfo.typeInfo[0], aggResult, {
+								overrideType: aggInfo.instance.getType()
+							});
+						}
+						else {
+							aggResult_formatted = format(null, null, aggResult, {
+								overrideType: aggInfo.instance.getType(),
+								convert: false
+							});
+						}
+
+						if (aggInfo.debug) {
+							debug.info('GRID TABLE - PLAIN // FOOTER - ' + field, 'Aggregate result: %s',
+								JSON.stringify(aggResult));
+						}
+
+						switch (typeof footerConfig.format) {
+						case 'function':
+							footerVal = footerConfig.format(aggResult_formatted);
+							break;
+						case 'string':
+							footerVal = sprintf$1.sprintf(footerConfig.format, aggResult_formatted);
+							break;
+						default:
+							throw new Error('Footer config for field "' + field + '": `format` must be a function or a string');
+						}
+					}
+
+					if (footerVal instanceof Element || footerVal instanceof jQuery) {
+						td.append(footerVal);
+					}
+					else {
+						td.text(footerVal);
+					}
+				}
+
+				return td;
+			}));
+
+			// Finish the row that contains the aggregate functions.
+
+			self.ui.tfoot.append(tr);
+		};
+
+		var makeExternalFooterRow = function () {
+			// Create a new footer row for an external footer that we've absorbed into the grid.
+
+			if (self.opts.footer == null || !self.opts.stealGridFooter) {
+				return;
+			}
+
+			var tr = jQuery('<tr>');
+
+			if (!isVisible(self.opts.footer)) {
+				tr.hide();
+			}
+
+			if (self.features.rowSelect) {
+				// Circumventing the correct logic here because TableTool requires an empty footer in order to
+				// implement horizontal scrolling; if you omit the footer (with a TR and all appropriate TD's
+				// in it) then you can't scroll horizontally.
+				{
+					// There is an aggregate row, so it contains the "select all" checkbox.
+					jQuery('<td>', {'class': 'wcdv_group_col_spacer'}).appendTo(tr);
+				}
+			}
+			// colspan = (spacers: # groupFields + 1) + (columns: # fields - # groupFields) = (# fields) + 1
+			jQuery('<td>', {'colspan': columns.length + 1}).append(self.opts.footer).appendTo(tr);
+			self.ui.tfoot.append(tr);
+		};
+
+		makeAggregateRow();
+		makeExternalFooterRow();
 	};
 
 	// #addWorkHandler {{{2
@@ -34188,6 +36407,7 @@
 		self.super.ctor.apply(self, arguments);
 
 		self.features.limit = false;
+		self.features.rowSelect = false;
 		self.features.footer = false;
 
 		debug.info('GRID TABLE - GROUP - SUMMARY', 'Constructing grid table; features = %O', features);
@@ -34260,7 +36480,7 @@
 
 						self.csv.addCol(fcc.displayText || field);
 
-						self._addSortingToHeader(data, 'vertical', {groupFieldIndex: fieldIdx}, headingThControls, getProp(data, 'agg', 'info', 'group'));
+						self._addSortingToHeader(data, 'vertical', {groupFieldIndex: fieldIdx}, headingThControls.get(0), getProp(data, 'agg', 'info', 'group'));
 
 						self.setCss(headingTh, field);
 
@@ -34288,8 +36508,12 @@
 		var ai = self._getAggInfo(data);
 		var aggType, aggInfo, rowAgg;
 
+		self._setupFullValueWin(data);
+
 		underscore.each(data.data, function (rowGroup, groupNum) {
-			var tr = jQuery('<tr>');
+			var tr = document.createElement('tr');
+			tr.setAttribute('data-rowval-index', groupNum);
+
 			self.csv.addRow();
 
 			underscore.each(self.opts.displayOrder, function (what, displayOrderIndex) {
@@ -34315,14 +36539,19 @@
 						// that using Numeral exactly as specified for the "Amount" field.
 
 						underscore.each(self.opts.addCols, function (addCol) {
+							var td = document.createElement('td');
 							var addColResult = addCol.value(data.data, groupNum, rowAgg, aggType);
+							var addColText;
 
-							if (addColResult instanceof Element || addColResult instanceof jQuery) {
-								var td = jQuery('<td>').append(addColResult);
+							if (addColResult instanceof jQuery) {
+								addColResult = addColResult.get(0);
+							}
+
+							if (addColResult instanceof Element) {
+								td.appendChild(addColResult);
+								self.csv.addCol(addColResult.innerText);
 							}
 							else {
-								var addColText;
-
 								if (aggInfo.instance.inheritFormatting) ;
 								else {
 									addColText = format(null, null, addColResult, {
@@ -34330,15 +36559,15 @@
 										convert: false
 									});
 								}
-								td = jQuery('<td>').text(addColText);
+								td.innerText = addColText;
+								self.csv.addCol(addColText);
 							}
 
 							if (getProp(opts, 'pivotConfig', 'aggField')) {
 								self.setAlignment(td, self.colConfig.get(opts.pivotConfig.aggField), typeInfo.get(opts.pivotConfig.aggField));
 							}
 
-							td.appendTo(tr);
-							self.csv.addCol(td.text());
+							tr.appendChild(td);
 						});
 					}
 				}
@@ -34356,6 +36585,9 @@
 			underscore.each(self.opts.displayOrder, function (what) {
 				switch (what) {
 				case 'rowVals':
+					for (var i = 0; i < data.groupFields.length - 1; i += 1) {
+						self.csv.addCol('');
+					}
 					self.csv.addCol('Total');
 
 					var span = jQuery('<span>', {'class': 'wcdv_heading_title'})
@@ -34376,27 +36608,40 @@
 							, text
 							, td;
 
+						td = jQuery('<td>');
+						td.attr('data-wcdv-agg-scope', 'all');
+						td.attr('data-wcdv-agg-num', aggInfo.aggNum);
 						aggResult = data.agg.results.all[aggInfo.aggNum];
 
-						if (aggInfo.instance.inheritFormatting) {
-							text = format(aggInfo.colConfig[0], aggInfo.typeInfo[0], aggResult, {
-								overrideType: aggInfo.instance.getType()
-							});
+						if (isElement(aggResult)) {
+							td.append(aggResult);
+							self.csv.addCol(getElement(aggResult).innerText);
 						}
 						else {
-							text = format(null, null, aggResult, {
-								overrideType: aggInfo.instance.getType(),
-								convert: false
-							});
+							if (aggInfo.instance.inheritFormatting) {
+								text = format(aggInfo.colConfig[0], aggInfo.typeInfo[0], aggResult, {
+									overrideType: aggInfo.instance.getType()
+								});
+								setTableCell(td, text, {
+									field: aggInfo.fields[0],
+									colConfig: aggInfo.colConfig[0],
+									typeInfo: aggInfo.typeInfo[0]
+								});
+							}
+							else {
+								text = format(null, null, aggResult, {
+									overrideType: aggInfo.instance.getType(),
+									convert: false
+								});
+								setTableCell(td, text);
+							}
+							self.csv.addCol(td.innerText);
 						}
-
-						td = jQuery('<td>').text(text);
 
 						if (self.opts.drawInternalBorders || ai.cell.length > 1) {
 							td.addClass(aiAllIndex === 0 ? 'wcdv_pivot_aggregate_boundary' : 'wcdv_pivot_colval_boundary');
 						}
 
-						self.csv.addCol(text);
 						self.setAlignment(td, aggInfo.colConfig[0], aggInfo.typeInfo[0], aggInfo.instance.getType());
 						td.appendTo(tr);
 					});
@@ -34423,6 +36668,37 @@
 
 		if (typeof cont === 'function') {
 			return cont();
+		}
+	};
+
+	// #drawFooter {{{2
+
+	GridTableGroupSummary.prototype.drawFooter = function (columns, data, typeInfo) {
+		var self = this;
+		var tr;
+
+		// Create the footer row to show aggregate functions.
+
+		tr = jQuery('<tr>');
+
+		// Add the "select all" checkbox when row selection is enabled.
+
+		if (self.features.rowSelect) {
+			self.ui.checkAll_tfoot = jQuery('<input>', { 'name': 'checkAll', 'type': 'checkbox' })
+				.on('change', function (evt) {
+					self.checkAll(evt);
+				});
+			jQuery('<td>', {'class': 'wcdv_group_col_spacer'}).append(self.ui.checkAll_tfoot).appendTo(tr);
+		}
+
+		// Create a new footer row for an external footer that we've absorbed into the grid.
+
+		if (self.opts.footer != null && self.opts.stealGridFooter) {
+			tr.append(jQuery('<td>', {'colspan': data.groupFields.length + self._getAggInfo(data).group.length}).append(self.opts.footer));
+		}
+
+		if (tr.children().length > 0) {
+			self.ui.tfoot.append(tr);
 		}
 	};
 
@@ -34464,7 +36740,7 @@
 
 		debug.info('GRID TABLE - PIVOT', 'Constructing grid table; features = %O', features);
 
-		setPropDef(['rowVals', 'cells', 'groupAggregates'], self.opts, 'displayOrder');
+		setPropDef(['rowVals', 'cells', 'groupAggregates', 'addCols'], self.opts, 'displayOrder');
 	});
 
 	// #canRender {{{2
@@ -34500,7 +36776,16 @@
 			headingThContainer,
 			th;
 
-		var addGroupFields = function (tr) {
+		// +---------------------------+--------------------------------------+-----------+
+		// |                           | COLVAL 1.1              | COLVAL 1.2 |           |
+		// +---------------------------+------------+------------+------------+-----------+
+		// |                           | COLVAL 2.1 | COLVAL 2.2 | COLVAL 2.1 |           |
+		// +-------------+-------------+------------+------------+------------+-----------+
+		// | GROUP FIELD | GROUP FIELD |                                      | GROUP AGG |
+		// +-------------+-------------+--------------------------------------+-----------+
+		//  ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
+
+		var displayRowVals = function (tr, pivotFieldNum, displayOrderIndex) {
 			underscore.each(data.groupFields, function (field, fieldIdx) {
 				var fcc = self.colConfig.get(field) || {};
 				span = jQuery('<span>').addClass('wcdv_heading_title').text(fcc.displayText || field);
@@ -34520,7 +36805,7 @@
 					.append(headingThContainer)
 					._makeDraggableField();
 
-				self._addSortingToHeader(data, 'vertical', {groupFieldIndex: fieldIdx}, headingThControls, getPropDef([], data, 'agg', 'info', 'cell'));
+				self._addSortingToHeader(data, 'vertical', {groupFieldIndex: fieldIdx}, headingThControls.get(0), getPropDef([], data, 'agg', 'info', 'cell'));
 
 				self.setCss(th, field);
 
@@ -34529,38 +36814,73 @@
 			});
 		};
 
+		//  ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 		// +---------------------------+--------------------------------------+-----------+
 		// |                           | COLVAL 1.1              | COLVAL 1.2 |           |
+		// +---------------------------+------------+------------+------------+-----------+
+		// |                           | COLVAL 2.1 | COLVAL 2.2 | COLVAL 2.1 |           |
 		// +-------------+-------------+------------+------------+------------+-----------+
-		// | GROUP FIELD | GROUP FIELD | COLVAL 2.1 | COLVAL 2.2 | COLVAL 2.1 | GROUP AGG |
-		// +-------------+-------------+------------+------------+------------+-----------+
-		//  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+		// | GROUP FIELD | GROUP FIELD |                                      | GROUP AGG |
+		// +-------------+-------------+--------------------------------------+-----------+
 
-		var displayRowVals = function (tr, pivotFieldNum, displayOrderIndex) {
-			if (pivotFieldNum === data.pivotFields.length - 1) {
-				addGroupFields(tr);
-			}
-			else {
-				tr.append(jQuery('<th>', { colspan: data.groupFields.length }));
-				for (var i = 0; i < data.groupFields.length; i += 1) {
+		var displayRowVals_padding = function (tr) {
+			if (data.groupFields.length > 1) {
+				tr.append(jQuery('<th>', { colspan: data.groupFields.length - 1 }));
+				for (var i = 0; i < data.groupFields.length - 1; i += 1) {
 					self.csv.addCol('');
 				}
 			}
 		};
 
-		// +---------------------------+--------------------------------------+-----------+
-		// |                           | COLVAL 1.1              | COLVAL 1.2 |           |
+		//                ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+		// +-------------+-------------+--------------------------------------+-----------+
+		// |             | PIVOT FIELD | COLVAL 1.1              | COLVAL 1.2 |           |
 		// +-------------+-------------+------------+------------+------------+-----------+
-		// | GROUP FIELD | GROUP FIELD | COLVAL 2.1 | COLVAL 2.2 | COLVAL 2.1 | GROUP AGG |
+		// |             | PIVOT FIELD | COLVAL 2.1 | COLVAL 2.2 | COLVAL 2.1 |           |
 		// +-------------+-------------+------------+------------+------------+-----------+
-		//                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+		// | GROUP FIELD | GROUP FIELD |                                      | GROUP AGG |
+		// +-------------+-------------+--------------------------------------+-----------+
 
-		var displayCells = function (tr, pivotFieldNum, displayOrderIndex) {
+		var displayCells = function (tr, pivotFieldIdx, displayOrderIndex) {
 			var colVal, colValIndex;
 			var ai = self._getAggInfo(data);
 			// Indicates that we're on the last pivot field, i.e. the last row of the table header.
-			var isLastPivotField = pivotFieldNum === data.pivotFields.length - 1;
-			var pivotField = data.pivotFields[pivotFieldNum];
+			var isLastPivotField = pivotFieldIdx === data.pivotFields.length - 1;
+			var pivotField = data.pivotFields[pivotFieldIdx];
+
+			var fcc = self.colConfig.get(pivotField) || {};
+			var pivotSpec = data.pivotSpec[pivotFieldIdx];
+			var fti = self.typeInfo.get(pivotField);
+
+			if (pivotSpec.fun != null) {
+				fti = {
+					type: GROUP_FUNCTION_REGISTRY.get(pivotSpec.fun).resultType
+				};
+			}
+
+			var span = jQuery('<span>').addClass('wcdv_heading_title').text(fcc.displayText || pivotField);
+			self.csv.addCol(fcc.displayText || pivotField);
+
+			var headingThControls = jQuery('<div>');
+
+			var headingThContainer = jQuery('<div>')
+				.addClass('wcdv_heading_container')
+				.append(span, headingThControls);
+
+			var th = jQuery('<th>')
+				.attr({
+					'data-wcdv-field': pivotField,
+					'data-wcdv-draggable-origin': 'GRID_TABLE_HEADER'
+				})
+				.append(headingThContainer)
+				._makeDraggableField();
+
+			self._addSortingToHeader(data, 'horizontal', {pivotFieldIndex: pivotFieldIdx}, headingThControls.get(0), getPropDef([], data, 'agg', 'info', 'cell'));
+
+			self.setCss(th, pivotField);
+
+			self.ui.thMap[pivotField] = th;
+			tr.append(th);
 
 			// Create headers for the fields that we've pivotted by.  The headers are the column values for
 			// those fields.
@@ -34582,8 +36902,8 @@
 			var lastColValCount = 0;
 
 			for (colValIndex = 0; colValIndex < data.colVals.length; colValIndex += 1) {
-				colVal = data.colVals[colValIndex][pivotFieldNum];
-				colVal = format(self.colConfig.get(pivotField), typeInfo.get(pivotField), colVal);
+				colVal = data.colVals[colValIndex][pivotFieldIdx];
+				colVal = format(self.colConfig.get(pivotField), fti, colVal);
 
 				if (colVal !== lastColVal || isLastPivotField) {
 					if (lastColVal !== null) {
@@ -34610,8 +36930,13 @@
 					lastColVal = colVal;
 					lastColValCount = 1;
 
-					span = jQuery('<span>').addClass('wcdv_heading_title').text(colVal);
-					self.csv.addCol(colVal);
+					span = jQuery('<span>').addClass('wcdv_heading_title');
+					setElement(span, colVal, {
+						field: pivotField,
+						colConfig: fcc,
+						typeInfo: fti
+					});
+					self.csv.addCol(span.text());
 
 					headingThControls = jQuery('<div>');
 
@@ -34627,7 +36952,7 @@
 					// We only allow sorting on the final
 
 					if (isLastPivotField) {
-						self._addSortingToHeader(data, 'vertical', {colVal: data.colVals[colValIndex], aggNum: 0}, headingThControls, getPropDef([], data, 'agg', 'info', 'cell'));
+						self._addSortingToHeader(data, 'vertical', {colVal: data.colVals[colValIndex], aggNum: 0}, headingThControls.get(0), getPropDef([], data, 'agg', 'info', 'cell'));
 					}
 
 					if (ai.cell.length === 1) {
@@ -34667,35 +36992,67 @@
 
 		// +---------------------------+--------------------------------------+-----------+
 		// |                           | COLVAL 1.1              | COLVAL 1.2 |           |
+		// +---------------------------+------------+------------+------------+-----------+
+		// |                           | COLVAL 2.1 | COLVAL 2.2 | COLVAL 2.1 |           |
 		// +-------------+-------------+------------+------------+------------+-----------+
-		// | GROUP FIELD | GROUP FIELD | COLVAL 2.1 | COLVAL 2.2 | COLVAL 2.1 | GROUP AGG |
-		// +-------------+-------------+------------+------------+------------+-----------+
-		//                                                                     ^^^^^^^^^^^
+		// | GROUP FIELD | GROUP FIELD |                                      | GROUP AGG |
+		// +-------------+-------------+--------------------------------------+-----------+
+		//                              ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
 
-		var displayGroupAggregates = function (tr, pivotFieldNum, displayOrderIndex, displayOrderMax) {
-			var isLastPivotField = pivotFieldNum === data.pivotFields.length - 1;
-
-			if (!isLastPivotField) {
-				var numExtraCols = getPropDef(0, data, 'agg', 'info', 'group', 'length')
-					+ getPropDef(0, opts, 'addCols', 'length');
-				if (numExtraCols > 0) {
-					var th = jQuery('<th>', { colspan: numExtraCols });
-					if (displayOrderIndex > 0) {
-						th.addClass('wcdv_bld'); // border-left: double
-					}
-					if (displayOrderIndex < displayOrderMax - 1) {
-						th.addClass('wcdv_brd'); // border-right: double
-					}
-					tr.append(th);
-				}
+		var displayCells_padding = function (tr) {
+			var ai = self._getAggInfo(data);
+			var hr = jQuery('<hr>', {
+				class: 'wcdv_hr_gradient'
+			});
+			var div = jQuery('<div>&nbsp;</div>');
+			var th = jQuery('<th>', {
+				class: 'wcdv_pivot_colval_boundary wcdv_cell_empty',
+				colspan: data.colVals.length * Math.max(ai.cell.length, 1)
+			});
+			//hr.appendTo(th);
+			div.appendTo(th);
+			th.appendTo(tr);
+			for (var i = 0; i < data.colVals.length * Math.max(ai.cell.length, 1); i += 1) {
+				self.csv.addCol('');
 			}
-			else {
-				// Render the user's custom-defined additional columns at the end of the last row of pivot field
-				// column values.
+		};
 
+		//                                                                     ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+		// +---------------------------+--------------------------------------+----------------------+
+		// |                           | COLVAL 1.1              | COLVAL 1.2 |                      |
+		// +---------------------------+------------+------------+------------+----------------------+
+		// |                           | COLVAL 2.1 | COLVAL 2.2 | COLVAL 2.1 |                      |
+		// +-------------+-------------+------------+------------+------------+-----------+----------+
+		// | GROUP FIELD | GROUP FIELD |                                      | GROUP AGG | ADD COLS |
+		// +-------------+-------------+--------------------------------------+-----------+----------+
+
+		var displayGroupAggregates_padding = function (tr, displayOrderIndex, displayOrderMax) {
+			var numExtraCols = getPropDef(0, data, 'agg', 'info', 'group', 'length')
+				+ getPropDef(0, self.opts, 'addCols', 'length');
+			if (numExtraCols > 0) {
+				var th = jQuery('<th>', { colspan: numExtraCols });
+				if (displayOrderIndex > 0) {
+					th.addClass('wcdv_bld'); // border-left: double
+				}
+				if (displayOrderIndex < displayOrderMax - 1) {
+					th.addClass('wcdv_brd'); // border-right: double
+				}
+				tr.append(th);
+			}
+		};
+
+		// +---------------------------+--------------------------------------+-----------+
+		// |                           | COLVAL 1.1              | COLVAL 1.2 |           |
+		// +---------------------------+------------+------------+------------+-----------+
+		// |                           | COLVAL 2.1 | COLVAL 2.2 | COLVAL 2.1 |           |
+		// +-------------+-------------+------------+------------+------------+-----------+
+		// | GROUP FIELD | GROUP FIELD |                                      | GROUP AGG |
+		// +-------------+-------------+--------------------------------------+-----------+
+		//                                                                     ↑↑↑↑↑↑↑↑↑↑↑
+
+		var displayGroupAggregates = function (tr, displayOrderIndex, displayOrderMax) {
 				self.drawHeader_aggregates(data, tr, displayOrderIndex, displayOrderMax);
 				self.drawHeader_addCols(tr, typeInfo, opts);
-			}
 		};
 
 		// This produces separate rows in the header for each pivot field.  That's what allows you to
@@ -34714,29 +37071,45 @@
 		// | John | Robert | Ted | Franklin | Teddy |
 		// +------+--------+-----+----------+-------+
 
-		for (var pivotFieldNum = 0; pivotFieldNum < data.pivotFields.length; pivotFieldNum += 1) {
+		for (var pivotFieldIdx = 0; pivotFieldIdx < data.pivotFields.length; pivotFieldIdx += 1) {
 			self.csv.addRow();
-
 			tr = jQuery('<tr>');
-
 			underscore.each(self.opts.displayOrder, function (what, displayOrderIndex) {
 				if (typeof what === 'string') {
 					switch (what) {
 					case 'rowVals':
-						displayRowVals(tr, pivotFieldNum);
+						displayRowVals_padding(tr);
 						break;
 					case 'cells':
-						displayCells(tr, pivotFieldNum);
+						displayCells(tr, pivotFieldIdx);
 						break;
 					case 'groupAggregates':
-						displayGroupAggregates(tr, pivotFieldNum, displayOrderIndex, self.opts.displayOrder.length);
+						displayGroupAggregates_padding(tr, displayOrderIndex, self.opts.displayOrder.length);
 						break;
 					}
 				}
 			});
-
 			tr.appendTo(self.ui.thead);
 		}
+
+		self.csv.addRow();
+		tr = jQuery('<tr>');
+		underscore.each(self.opts.displayOrder, function (what, displayOrderIndex) {
+			if (typeof what === 'string') {
+				switch (what) {
+				case 'rowVals':
+					displayRowVals(tr);
+					break;
+				case 'cells':
+					displayCells_padding(tr);
+					break;
+				case 'groupAggregates':
+					displayGroupAggregates(tr, displayOrderIndex, self.opts.displayOrder.length);
+					break;
+				}
+			}
+		});
+		tr.appendTo(self.ui.thead);
 	};
 
 	// #drawBody {{{2
@@ -34761,10 +37134,13 @@
 			}
 		}
 
+		self._setupFullValueWin(data);
+
 		underscore.each(data.data, function (rowGroup, groupNum) {
 			self.csv.addRow();
 
-			var tr = jQuery('<tr>');
+			var tr = document.createElement('tr');
+			tr.setAttribute('data-rowval-index', groupNum);
 
 			underscore.each(self.opts.displayOrder, function (what, displayOrderIndex) {
 				if (typeof what === 'string') {
@@ -34792,7 +37168,7 @@
 						underscore.each(rowGroup, function (colGroup, pivotNum) {
 							if (ai.cell.length === 0) {
 								// There's no cell aggregate functions, so there isn't anything to put in the cell.
-								tr.append(document.createElement('td'));
+								tr.appendChild(document.createElement('td'));
 							}
 							else {
 								// Every cell aggregate function is going to make a separate cell.
@@ -34802,44 +37178,61 @@
 									var agg = data.agg.results.cell[aggNum];
 									var aggResult = agg[groupNum][pivotNum];
 
+									var td = document.createElement('td');
+									td.classList.add('wcdv_pivot_cell');
+									td.setAttribute('data-rowval-index', groupNum);
+									td.setAttribute('data-colval-index', pivotNum);
+									td.setAttribute('data-wcdv-agg-scope', 'cell');
+									td.setAttribute('data-wcdv-agg-num', aggInfo.aggNum);
+
 									rowAgg.push(aggResult);
 
 									var text;
 
-									if (aggInfo.instance.inheritFormatting) {
-										text = format(aggInfo.colConfig[0], aggInfo.typeInfo[0], aggResult, {
-											overrideType: aggType
-										});
+									if (aggResult instanceof jQuery) {
+										aggResult = aggResult.get(0);
+									}
+
+									if (aggResult instanceof Element) {
+										td.appendChild(aggResult);
+										self.csv.addCol(aggResult.innerText);
 									}
 									else {
-										text = format(null, null, aggResult, {
-											overrideType: aggType,
-											convert: false
-										});
+										if (aggInfo.instance.inheritFormatting) {
+											text = format(aggInfo.colConfig[0], aggInfo.typeInfo[0], aggResult, {
+												overrideType: aggType
+											});
+											setTableCell(td, text, {
+												field: aggInfo.fields[0],
+												colConfig: aggInfo.colConfig[0],
+												typeInfo: aggInfo.typeInfo[0]
+											});
+										}
+										else {
+											text = format(null, null, aggResult, {
+												overrideType: aggType,
+												convert: false
+											});
+											setTableCell(td, text);
+										}
+										self.csv.addCol(td.innerText);
 									}
 
-									var td = jQuery('<td>')
-										.addClass('wcdv_pivot_cell')
-										.attr({
-											'data-rowval-index': groupNum,
-											'data-colval-index': pivotNum
-										})
-										.text(text)
-									;
-
-									self._addDrillDownClass(td);
+									if (underscore.every(data.groupSpec, function (gs) { return gs.fun == null; })
+											&& underscore.every(data.pivotSpec, function (ps) { return ps.fun == null; })) {
+										self._addDrillDownClass(td);
+									}
 
 									if ((self.opts.drawInternalBorders || ai.cell.length > 1) && aiCellIndex === 0) {
-										td.addClass('wcdv_pivot_colval_boundary');
+										td.classList.add('wcdv_pivot_colval_boundary');
 									}
 
-									self.csv.addCol(text);
 									// REMOVED: How do we let the user set sizes &c. when doing a pivot table?
 									// self.setCss(td, col);
 
 									self.setAlignment(td, aggInfo.colConfig[0], aggInfo.typeInfo[0], aggType);
 
-									td.appendTo(tr);
+									tr.appendChild(td);
 								});
 							}
 						});
@@ -34863,35 +37256,40 @@
 
 						underscore.each(self.opts.addCols, function (addCol) {
 							var addColResult = addCol.value(data.data, groupNum, rowAgg, aggType);
+							var td = document.createElement('td');
+							var addColText;
 
-							if (addColResult instanceof Element || addColResult instanceof jQuery) {
-								var td = jQuery('<td>').append(addColResult);
+							if (addColResult instanceof jQuery) {
+								addColResult = addColResult.get(0);
+							}
+
+							if (addColResult instanceof Element) {
+								td.appendChild(addColResult);
+								self.csv.addCol(addColResult.innerText);
 							}
 							else {
-								var addColText;
-
 								{
 									addColText = format(null, null, addColResult, {
 										alwaysFormat: true,
 										convert: false
 									});
 								}
-								td = jQuery('<td>').text(addColText);
+								td.innerText = addColText;
+								self.csv.addCol(addColText);
 							}
 
 							if (getProp(opts, 'pivotConfig', 'aggField')) {
 								self.setAlignment(td, self.colConfig.get(opts.pivotConfig.aggField), typeInfo.get(opts.pivotConfig.aggField));
 							}
 
-							td.appendTo(tr);
-							self.csv.addCol(td.text());
+							tr.appendChild(td);
 						});
 						break;
 					}
 				}
 			});
 
-			tr.appendTo(self.ui.tbody);
+			self.ui.tbody.append(tr);
 		});
 
 		// ===========================================================================
@@ -34948,7 +37346,7 @@
 
 						// Add sorting to the header we just created.
 
-						self._addSortingToHeader(data, 'horizontal', {aggType: 'pivot', aggNum: aggNum}, headingThControls, getPropDef([], data, 'agg', 'info', 'cell'));
+						self._addSortingToHeader(data, 'horizontal', {aggType: 'pivot', aggNum: aggNum}, headingThControls.get(0), getPropDef([], data, 'agg', 'info', 'cell'));
 
 						break;
 					case 'cells':
@@ -34960,23 +37358,41 @@
 								self.csv.addCol('');
 							}
 
-							var aggResult = data.agg.results.pivot[aggNum][colValIdx];
-							if (aggInfo.instance.inheritFormatting) {
-								text = format(aggInfo.colConfig[0], aggInfo.typeInfo[0], aggResult, {
-									overrideType: aggInfo.instance.getType()
-								});
-							}
-							else {
-								text = format(null, null, aggResult, {
-									overrideType: aggInfo.instance.getType(),
-									convert: false
-								});
-							}
-
-							var td = jQuery('<td>').text(text).attr({
+							var td = jQuery('<td>').attr({
 								'data-colval-index': colValIdx
 							});
-							self._addDrillDownClass(td);
+							td.attr('data-wcdv-agg-scope', 'pivot');
+							td.attr('data-wcdv-agg-num', aggInfo.aggNum);
+							var aggResult = data.agg.results.pivot[aggNum][colValIdx];
+
+							if (isElement(aggResult)) {
+								td.append(aggResult);
+								self.csv.addCol(getElement(aggResult).innerText);
+							}
+							else {
+								if (aggInfo.instance.inheritFormatting) {
+									text = format(aggInfo.colConfig[0], aggInfo.typeInfo[0], aggResult, {
+										overrideType: aggInfo.instance.getType()
+									});
+									setTableCell(td, text, {
+										field: aggInfo.fields[0],
+										colConfig: aggInfo.colConfig[0],
+										typeInfo: aggInfo.typeInfo[0]
+									});
+								}
+								else {
+									text = format(null, null, aggResult, {
+										overrideType: aggInfo.instance.getType(),
+										convert: false
+									});
+									setTableCell(td, text);
+								}
+								self.csv.addCol(td.text());
+							}
+
+							if (underscore.every(data.pivotSpec, function (ps) { return ps.fun == null; })) {
+								self._addDrillDownClass(td.get(0));
+							}
 
 							if (ai.cell.length > 1) {
 								td.attr('colspan', ai.cell.length);
@@ -34986,7 +37402,6 @@
 								td.addClass('wcdv_pivot_colval_boundary');
 							}
 
-							self.csv.addCol(text);
 							self.setAlignment(td, aggInfo.colConfig[0], aggInfo.typeInfo[0], aggInfo.instance.getType());
 							td.appendTo(tr);
 
@@ -35017,26 +37432,39 @@
 
 							aggInfo = data.agg.info.all[aggNum];
 							aggResult = data.agg.results.all[aggNum];
+							td = jQuery('<td>');
+							td.attr('data-wcdv-agg-scope', 'all');
+							td.attr('data-wcdv-agg-num', aggInfo.aggNum);
 
-							if (aggInfo.instance.inheritFormatting) {
-								text = format(aggInfo.colConfig[0], aggInfo.typeInfo[0], aggResult, {
-									overrideType: aggInfo.instance.getType()
-								});
+							if (isElement(aggResult)) {
+								td.append(aggResult);
+								self.csv.addCol(getElement(aggResult).innerText);
 							}
 							else {
-								text = format(null, null, aggResult, {
-									overrideType: aggInfo.instance.getType(),
-									convert: false
-								});
+								if (aggInfo.instance.inheritFormatting) {
+									text = format(aggInfo.colConfig[0], aggInfo.typeInfo[0], aggResult, {
+										overrideType: aggInfo.instance.getType()
+									});
+									setTableCell(td, text, {
+										field: aggInfo.fields[0],
+										colConfig: aggInfo.colConfig[0],
+										typeInfo: aggInfo.typeInfo[0]
+									});
+								}
+								else {
+									text = format(null, null, aggResult, {
+										overrideType: aggInfo.instance.getType(),
+										convert: false
+									});
+									setTableCell(td, text);
+								}
+								self.csv.addCol(td.text());
 							}
-
-							td = jQuery('<td>').text(text);
 
 							if (self.opts.drawInternalBorders || ai.cell.length > 1) {
 								td.addClass(aiPivotIndex === 0 ? 'wcdv_pivot_aggregate_boundary' : 'wcdv_pivot_colval_boundary');
 							}
 
-							self.csv.addCol(text);
 							self.setAlignment(td, aggInfo.colConfig[0], aggInfo.typeInfo[0], aggInfo.instance.getType());
 							td.appendTo(tr);
 
@@ -35091,6 +37519,256 @@
 	GridRenderer.registry.set('table_group_summary', GridTableGroupSummary);
 	GridRenderer.registry.set('table_pivot', GridTablePivot);
 
+	// GridRendererHandlebars {{{1
+
+	var GridRendererHandlebars = makeSubclass('GridRendererHandlebars', GridRenderer, function () {
+		var self = this;
+
+		self.super.ctor.apply(self, arguments);
+
+		lib.registerHelper('rowval', function (groupField) {
+			if (['number', 'string'].indexOf(typeof groupField) < 0) {
+				throw new Error('In Handlebars "rowval" helper, `groupField` must be a number or string');
+			}
+
+			var groupFieldIndex;
+
+			if (typeof groupField === 'number') {
+				groupFieldIndex = groupField;
+
+				if (groupFieldIndex < 0) {
+					throw new Error('In Handlebars "rowval" helper, group field index "' + groupField + '" out of range');
+				}
+			}
+			else {
+				groupFieldIndex = self.data.groupFields.indexOf(groupField);
+
+				if (groupFieldIndex < 0) {
+					throw new Error('In Handlebars "rowval" helper, specified field "' + groupField + '" is not part of group');
+				}
+			}
+
+			return self.data.rowVals[this.rowValIndex][groupFieldIndex];
+		});
+
+		lib.registerHelper('colval', function (pivotField) {
+			if (['number', 'string'].indexOf(typeof pivotField) < 0) {
+				throw new Error('In Handlebars "rowval" helper, `pivotField` must be a number or string');
+			}
+
+			var pivotFieldIndex;
+
+			if (typeof pivotField === 'number') {
+				pivotFieldIndex = pivotField;
+
+				if (pivotFieldIndex < 0) {
+					throw new Error('In Handlebars "rowval" helper, pivot field index "' + pivotField + '" out of range');
+				}
+			}
+			else {
+				pivotFieldIndex = self.data.pivotFields.indexOf(pivotField);
+
+				if (pivotFieldIndex < 0) {
+					throw new Error('In Handlebars "rowval" helper, specified field "' + pivotField + '" is not part of pivot');
+				}
+			}
+
+			return self.data.colVals[this.colValIndex][pivotFieldIndex];
+		});
+	});
+
+	// #_validateFeatures {{{2
+
+	GridRendererHandlebars.prototype._validateFeatures = function () {
+		var self = this;
+		self.features.limit = false;
+	};
+
+
+	// #canRender {{{2
+
+	GridRendererHandlebars.prototype.canRender = function (what) {
+		return true;
+	};
+
+	// #_draw_plain {{{2
+
+	GridRendererHandlebars.prototype._draw_plain = function (root, data, typeInfo, opts) {
+		var self = this;
+		var html = '';
+
+		if (data.data.length === 0) {
+			if (self.empty != null) {
+				html += self.empty();
+			}
+		}
+		else {
+			if (self.before != null) {
+				html += self.before();
+			}
+
+			if (self.item != null) {
+				underscore.each(data.data, function (row) {
+					var context = {};
+					underscore.each(row.rowData, function (cell, field) {
+						var fcc = self.colConfig.get(field) || {};
+						var value = format(fcc, typeInfo.get(field), cell);
+						if (value instanceof Element || value instanceof jQuery) {
+							value = outerHtml(value);
+						}
+						context[field] = value;
+					});
+					html += self.item(context);
+				});
+			}
+
+			if (self.after != null) {
+				html += self.after();
+			}
+		}
+
+		root.html(html);
+	};
+
+	// #_draw_group {{{2
+
+	GridRendererHandlebars.prototype._draw_group = function (root, data, typeInfo, opts) {
+		var self = this;
+		var html = '';
+
+		if (data.data.length === 0) {
+			if (self.empty != null) {
+				html += self.empty();
+			}
+		}
+		else {
+			if (self.before != null) {
+				html += self.before();
+			}
+
+			if (self.item != null) {
+				underscore.each(data.data, function (group, rowValIndex) {
+					var context = {
+						rowValIndex: rowValIndex
+					};
+					html += self.item(context);
+				});
+			}
+
+			if (self.after != null) {
+				html += self.after();
+			}
+		}
+
+		root.html(html);
+	};
+
+	// #_draw_pivot {{{2
+
+	GridRendererHandlebars.prototype._draw_pivot = function (root, data, typeInfo, opts) {
+		var self = this;
+		var html = '';
+
+		if (data.data.length === 0) {
+			if (self.empty != null) {
+				html += self.empty();
+			}
+		}
+		else {
+			if (self.before != null) {
+				html += self.before();
+			}
+
+			if (self.item != null) {
+				underscore.each(data.data, function (group, rowValIndex) {
+					underscore.each(group, function (pivot, colValIndex) {
+						var div = jQuery('<div>').appendTo(root);
+						var context = {
+							rowValIndex: rowValIndex,
+							colValIndex: colValIndex
+						};
+						html += self.item(context);
+					});
+				});
+			}
+
+			if (self.after != null) {
+				html += self.after();
+			}
+		}
+
+		root.html(html);
+	};
+
+	// #draw {{{2
+
+	GridRendererHandlebars.prototype.draw = function (root, cont, opts) {
+		var self = this;
+
+		if (cont != null && typeof cont !== 'function') {
+			throw new Error('Call Error: `cont` must be null or a function');
+		}
+
+		return self.super.draw(root, opts, function (ok, data, typeInfo) {
+			if (!ok) {
+				return cont();
+			}
+
+			var k1 = data.isPlain ? 'plain'
+				: data.isGroup ? 'group'
+				: data.isPivot ? 'pivot'
+				: null;
+
+			var configKey = data.isPlain ? 'whenPlain'
+				: data.isGroup ? 'whenGroup'
+				: data.isPivot ? 'whenPivot'
+				: null;
+
+			var config = self.opts[configKey] || {};
+
+			if (config.empty != null) {
+				self.empty = lib.compile(config.empty);
+			}
+
+			if (config.before != null) {
+				self.before = lib.compile(config.before);
+			}
+
+			if (config.item != null) {
+				self.item = lib.compile(config.item);
+			}
+
+			if (config.after != null) {
+				self.after = lib.compile(config.after);
+			}
+
+			self['_draw_' + k1](root, data, typeInfo, opts);
+
+			self.addWorkHandler();
+
+			self.fire('renderEnd');
+			self.drawLock.unlock();
+
+			if (typeof cont === 'function') {
+				return cont();
+			}
+		});
+	};
+
+	// #addWorkHandler {{{2
+
+	GridRendererHandlebars.prototype.addWorkHandler = function () {
+		var self = this;
+
+		self.view.on('workEnd', function (info, ops) {
+			self.draw(self.root, null, self.drawOpts);
+		}, { who: self, limit: 1 });
+	};
+
+	// Registry
+
+	GridRenderer.registry.set('handlebars', GridRendererHandlebars);
+
 	// ColConfigWin {{{1
 
 	var ColConfigWin = makeSubclass('ColConfigWin', Object, function (grid, colConfig) {
@@ -35121,9 +37799,13 @@
 			modal: true,
 			width: 600,
 			position: {
-				my: 'top',
-				at: 'bottom',
-				of: posElt
+				my: 'center',
+				at: 'center',
+				of: window
+			},
+			classes: {
+				"ui-dialog": "ui-corner-all wcdv_dialog",
+				"ui-dialog-titlebar": "ui-corner-all",
 			},
 			buttons: [{
 				text: 'OK',
@@ -35154,11 +37836,16 @@
 			}
 		});
 
+		var pinnedCount = 0;
+
 		var colTable = jQuery('<table>')
 			.addClass('wcdv_colconfigwin_table')
-			.appendTo(orderWin);
+			.appendTo(jQuery('<div>').css({
+				'max-height': '40ex',
+				'overflow-y': 'scroll'
+			}).appendTo(orderWin));
 
-		var colTableHeader = jQuery('<thead><th></th><th>Field</th><th>Display</th><th></th><th></th>')
+		var colTableHeader = jQuery('<thead><th class="wcdv_bottom_border_teal">Field</th><th class="wcdv_bottom_border_teal">Display</th><th colspan="5" class="wcdv_bottom_border_teal">Options</th>')
 			.appendTo(colTable);
 
 		var keys = current.keys();
@@ -35175,15 +37862,6 @@
 
 			tr = jQuery('<tr>');
 			td = jQuery('<td>')
-				.addClass('wcdv_minimal_width')
-				.appendTo(tr);
-
-			var dragButton = jQuery('<button>', {'type': 'button', 'title': 'Click and drag to reorder columns'})
-				.addClass('wcdv_icon_button drag-handle')
-				.append(fontAwesome('fa-bars'))
-				.appendTo(td);
-
-			td = jQuery('<td>')
 				.text(field)
 				.appendTo(tr);
 
@@ -35194,10 +37872,13 @@
 			var displayTextTd = td;
 
 			td = jQuery('<td>')
-				.addClass('wcdv_minimal_width')
+				.addClass('wcdv_width_1em')
 				.appendTo(tr);
 
-			var renameBtn = jQuery('<button>', {'type': 'button', 'title': 'Rename'})
+			var renameBtn = jQuery('<button>', {
+				'type': 'button',
+				'title': 'Rename column in table.'
+			})
 				.addClass('wcdv_icon_button')
 				.append(fontAwesome('fa-pencil'))
 				.on('click', function () {
@@ -35214,21 +37895,70 @@
 			;
 
 			td = jQuery('<td>')
-				.addClass('wcdv_minimal_width')
+				.addClass('wcdv_width_1em')
 				.appendTo(tr);
 
-			var isHiddenCheckbox = jQuery('<input>', {'type': 'checkbox'})
+			var isPinnedCheckbox = jQuery('<input>', {
+				'type': 'checkbox',
+				'title': 'Pin column to left side of table?'
+			})
+				.prop('checked', getPropDef(false, colConfig, 'isPinned'))
+				.on('change', function () {
+					colConfig.isPinned = isPinnedCheckbox.prop('checked');
+					if (colConfig.isPinned) {
+						pinnedCount += 1;
+					}
+					else {
+						pinnedCount -= 1;
+					}
+					if (pinnedCount > 0) {
+						pinnedMsg.show();
+					}
+					else {
+						pinnedMsg.hide();
+					}
+				})
+				.appendTo(td)
+				._makeIconCheckbox('fa-thumb-tack');
+
+			if (getPropDef(false, colConfig, 'isPinned')) {
+				pinnedCount += 1;
+			}
+
+			td = jQuery('<td>')
+				.addClass('wcdv_width_1em')
+				.appendTo(tr);
+
+			var isHiddenCheckbox = jQuery('<input>', {
+				'type': 'checkbox',
+				'title': 'Hide column?'
+			})
 				.prop('disabled', !getPropDef(true, colConfig, 'canHide'))
 				.prop('checked', getPropDef(false, colConfig, 'isHidden'))
 				.on('change', function () {
 					colConfig.isHidden = isHiddenCheckbox.prop('checked');
 				})
 				.appendTo(td)
-				._makeIconCheckbox('fa-eye-slash', 'fa-eye');
+				._makeIconCheckbox('fa-ban');
+
+			td = jQuery('<td>')
+				.addClass('wcdv_width_1em')
+				.appendTo(tr);
+
+			var allowHtmlCheckbox = jQuery('<input>', {
+				'type': 'checkbox',
+				'title': 'Allow HTML to be rendered?'
+			})
+				.prop('checked', getPropDef(false, colConfig, 'allowHtml'))
+				.on('change', function () {
+					colConfig.allowHtml = allowHtmlCheckbox.prop('checked');
+				})
+				.appendTo(td)
+				._makeIconCheckbox('fa-code');
 
 			/*
 			td = jQuery('<td>')
-				.addClass('wcdv_minimal_width')
+				.addClass('wcdv_width_1em')
 				.appendTo(tr);
 
 			var configBtn = jQuery('<button>', {'type': 'button', 'title': 'Click to configure column'})
@@ -35240,11 +37970,855 @@
 				.appendTo(td);
 			*/
 
+			td = jQuery('<td>')
+				.addClass('wcdv_width_1em')
+				.appendTo(tr);
+
+			var dragButton = jQuery('<button>', {
+				'type': 'button',
+				'title': 'Click and drag to reorder columns'
+			})
+				.addClass('wcdv_icon_button drag-handle')
+				.append(fontAwesome('fa-arrows-v'))
+				.appendTo(td);
+
 			tr.appendTo(colTableBody);
 		});
 
+		var pinnedMsg = jQuery('<div>')
+			.addClass('wcdv_info_banner')
+			.append(fontAwesome('fa-info-circle'))
+			.append(' Pinned columns always appear before any others in plain (non-grouped) output, in the relative order shown below.')
+			.hide()
+			.appendTo(orderWin);
+
+		if (pinnedCount > 0) {
+			pinnedMsg.show();
+		}
+
 		orderWin.dialog('open');
 	};
+
+	// HandlebarsEditor {{{1
+
+	var HandlebarsEditor = makeSubclass('HandlebarsEditor', Object, function (grid, onSave) {
+		var self = this;
+
+		var winEffect = {
+			effect: 'fade',
+			duration: 100
+		};
+
+		self.grid = grid;
+		self.win = jQuery('<div>', { title: 'Handlebars Configuration' }).dialog({
+			autoOpen: false,
+			modal: true,
+			width: 'auto',
+			position: {
+				my: 'center',
+				at: 'center',
+				of: window
+			},
+			classes: {
+				"ui-dialog": "ui-corner-all wcdv_dialog",
+				"ui-dialog-titlebar": "ui-corner-all",
+			},
+			buttons: [{
+				text: 'OK',
+				icon: 'ui-icon-check',
+				click: function () {
+					// Update the configuration of the grid.
+
+					self.tabData.each(function (v, k) {
+						underscore.each(['empty', 'before', 'item', 'after'], function (t) {
+							setProp(v.inputs[t].val(), self.grid.defn, 'rendererOpts', k, t);
+						});
+					});
+
+					self.win.dialog('close');
+					if (typeof onSave === 'function') {
+						onSave();
+					}
+				}
+			}, {
+				text: 'Cancel',
+				icon: 'ui-icon-cancel',
+				click: function () {
+					self.win.dialog('close');
+					if (typeof onCancel === 'function') {
+						onCancel();
+					}
+				}
+			}],
+			show: winEffect,
+			hide: winEffect,
+		});
+
+		// Tabs {{{2
+
+		var makeTab = function (name, displayName) {
+			var inputs = {};
+			var labels = {};
+
+			var li = jQuery('<li>').append(jQuery('<a>', {href: '#wcdv_hbe_' + name}).text(displayName));
+			var div = jQuery('<div>', {id: 'wcdv_hbe_' + name});
+
+			underscore.each([
+				{id: 'empty', label: 'Empty', rows: 4},
+				{id: 'before', label: 'Before', rows: 4},
+				{id: 'item', label: 'Item', rows: 8},
+				{id: 'after', label: 'After', rows: 4}
+			], function (x) {
+				labels[x.id] = jQuery('<label>', {
+					for: 'wcdv_hbe_' + name + '_' + x.id
+				})
+					.css('display', 'block')
+					.text(x.label + ':');
+				inputs[x.id] = jQuery('<textarea>', {
+					id: 'wcdv_hbe_' + name + '_' + x.id,
+					rows: x.rows,
+					cols: 80
+				})
+					.css('font-family', 'monospace');
+				div.append(labels[x.id]);
+				div.append(inputs[x.id]);
+			});
+
+			return { li: li, div: div, inputs: inputs };
+		};
+
+		self.tabData = new OrdMap();
+		self.tabData.set('whenPlain', makeTab('whenPlain', 'Plain'));
+		self.tabData.set('whenGroup', makeTab('whenGroup', 'Grouped'));
+		self.tabData.set('whenPivot', makeTab('whenPivot', 'Pivotted'));
+
+		var tabs = jQuery('<div>').appendTo(self.win);
+		var ul = jQuery('<ul>').appendTo(tabs);
+		self.tabData.each(function (x) {
+			ul.append(x.li);
+			tabs.append(x.div);
+		});
+		tabs.tabs();
+	});
+
+	// #show {{{2
+
+	HandlebarsEditor.prototype.show = function () {
+		var self = this;
+
+		// Setup the values of each textarea.
+
+		self.tabData.each(function (v, k) {
+			var config = getProp(self.grid.defn, 'rendererOpts', k);
+			if (config != null) {
+				underscore.each(['empty', 'before', 'item', 'after'], function (t) {
+					v.inputs[t].val(config[t]);
+				});
+			}
+		});
+
+		self.win.dialog('open');
+	};
+
+	// ToolbarSection {{{1
+
+	var ToolbarSection = makeSubclass('ToolbarSection', Object, function () {
+		var self = this;
+
+		self.ui = {};
+		self.ui.root = jQuery('<div>');
+	});
+
+	// #attach {{{2
+
+	ToolbarSection.prototype.attach = function (parent) {
+		var self = this;
+		self.ui.root.appendTo(parent);
+	};
+
+	// #detach {{{2
+
+	ToolbarSection.prototype.detach = function () {
+		var self = this;
+		self.ui.root.remove();
+	};
+
+	// #show {{{2
+
+	ToolbarSection.prototype.show = function () {
+		var self = this;
+		self.update();
+		self.ui.root.show();
+	};
+
+	// #hide {{{2
+
+	ToolbarSection.prototype.hide = function () {
+		var self = this;
+		self.ui.root.hide();
+	};
+
+	// #update {{{2
+
+	ToolbarSection.prototype.update = function () {
+		// Do nothing.
+	};
+
+	// PlainToolbar {{{1
+
+	var PlainToolbar = makeSubclass('PlainToolbar', ToolbarSection, function (grid) {
+		var self = this;
+
+		self.super.ctor.apply(self, []);
+		self.ui.root.addClass('wcdv_toolbar_section');
+
+		self.grid = grid;
+
+		grid.ui.limit_div = jQuery('<div>').css({'display': 'inline-block'}).appendTo(self.ui.root);
+
+		// Create a checkbox that will toggle the "automatically show more" feature for the grid table.
+
+		self.ui.autoShowMore = makeToggleCheckbox(
+			grid.defn,
+			['table', 'limit', 'autoShowMore'],
+			true,
+			'Show More on Scroll',
+			grid.ui.limit_div
+		);
+
+		// Create a button that will show all the rows when clicked.  We fake this a little bit by just
+		// turning off the "limit" feature and letting the grid table be redrawn (changing the features
+		// causes it to be redrawn).
+		//
+		// TODO: This should disable the "automatically show more" checkbox (need to make sure it gets
+		// re-enabled if we switch grid tables and come back - as "limit" feature will be reset to its
+		// default value).
+
+		jQuery('<button>', {'type': 'button'})
+			.on('click', function (evt) {
+				grid.renderer.updateFeatures({
+					'block': true,
+					'progress': true,
+					'limit': false
+				});
+			})
+			.text('Show All Rows')
+			.appendTo(grid.ui.limit_div)
+		;
+
+		self.ui.columnConfig = jQuery('<button>', {
+			'type': 'button'
+		})
+			.append(fontAwesome('fa-columns'))
+			.append('Columns')
+			.on('click', function (evt) {
+				grid.colConfigWin.show(grid.ui.controls, function (colConfig) {
+					grid.setColConfig(colConfig, {
+						from: 'ui'
+					});
+				});
+			})
+			.appendTo(self.ui.root)
+		;
+
+		self.ui.handlebarsEditor = jQuery('<button>', {
+			'type': 'button'
+		})
+			.append(fontAwesome('fa-pencil'))
+			.append('Handlebars Editor')
+			.on('click', function (evt) {
+				grid.handlebarsEditor.show();
+			})
+			.appendTo(self.ui.root)
+		;
+	});
+
+	// #update {{{2
+
+	PlainToolbar.prototype.update = function () {
+		var self = this;
+
+		if (self.grid.renderer.features.limit) {
+			self.grid.ui.limit_div.show();
+			self.ui.autoShowMore.show();
+		}
+		else {
+			self.grid.ui.limit_div.hide();
+			self.ui.autoShowMore.hide();
+		}
+
+		switch (self.grid.rendererName) {
+		case 'table':
+			self.ui.columnConfig.show();
+			self.ui.handlebarsEditor.hide();
+			break;
+		case 'handlebars':
+			self.ui.columnConfig.hide();
+			self.ui.handlebarsEditor.show();
+			break;
+		}
+	};
+
+	// GroupToolbar {{{1
+
+	var GroupToolbar = makeSubclass('GroupToolbar', ToolbarSection, function (grid) {
+		var self = this;
+
+		self.super.ctor.apply(self, []);
+		self.ui.root.addClass('wcdv_toolbar_section');
+
+		self.grid = grid;
+
+		var aggSpec;
+
+		grid.view.on('aggregateSet', function (a) {
+			aggSpec = deepCopy(a);
+		});
+
+		var enableDisable = function (selected) {
+			switch (selected) {
+			case 'summary':
+				self.ui.showTotalRow.prop('disabled', false);
+				self.ui.pinRowVals.prop('disabled', false);
+				self.ui.columnConfig.prop('disabled', true);
+				break;
+			case 'detail':
+				self.ui.showTotalRow.prop('disabled', true);
+				self.ui.pinRowVals.prop('disabled', true);
+				self.ui.columnConfig.prop('disabled', false);
+				break;
+			}
+		};
+
+		// Create radio buttons to switch between summary and detail group grid tables.
+
+		self.ui.groupMode = makeRadioButtons(
+			grid.defn
+			, ['table', 'groupMode']
+			, 'detail'
+			, null
+			, 'groupOutput'
+			, [{label: 'Summary', value: 'summary'}
+				, {label: 'Detail', value: 'detail'}]
+			, null
+			, function (selected) {
+				enableDisable(selected);
+				grid.redraw();
+			}
+			, self.ui.root
+		);
+
+		self.ui.showTotalRow = makeToggleCheckbox(
+			grid.defn,
+			['table', 'whenGroup', 'showTotalRow'],
+			true,
+			'Total Row',
+			self.ui.root,
+			function (isChecked) {
+				var agg = grid.view.getAggregate();
+
+				if (!isChecked) {
+					aggSpec = deepCopy(agg);
+					delete agg.all;
+				}
+				else {
+					agg.all = aggSpec.all;
+				}
+
+				grid.view.setAggregate(agg, {
+					sendEvent: false
+				});
+			}
+		);
+
+		self.ui.pinRowVals = makeToggleCheckbox(
+			grid.defn,
+			['table', 'whenGroup', 'pinRowvals'],
+			false,
+			'Pin Groups',
+			self.ui.root,
+			function (isChecked) {
+				grid.redraw();
+			}
+		);
+
+		self.ui.columnConfig = jQuery('<button>', {
+			'type': 'button'
+		})
+			.append(fontAwesome('fa-columns'))
+			.append('Columns')
+			.on('click', function (evt) {
+				grid.colConfigWin.show(grid.ui.controls, function (colConfig) {
+					grid.setColConfig(colConfig, {
+						from: 'ui'
+					});
+				});
+			})
+			.appendTo(self.ui.root)
+		;
+
+		self.ui.handlebarsEditor = jQuery('<button>', {
+			'type': 'button'
+		})
+			.append(fontAwesome('fa-pencil'))
+			.append('Handlebars Editor')
+			.on('click', function (evt) {
+				grid.handlebarsEditor.show();
+			})
+			.appendTo(self.ui.root)
+		;
+
+		enableDisable(grid.defn.table.groupMode);
+	});
+
+	// #update {{{2
+
+	GroupToolbar.prototype.update = function () {
+		var self = this;
+
+		switch (self.grid.rendererName) {
+		case 'table':
+			self.ui.groupMode.show();
+			self.ui.showTotalRow.show();
+			self.ui.pinRowVals.show();
+			self.ui.columnConfig.show();
+			self.ui.handlebarsEditor.hide();
+			break;
+		case 'handlebars':
+			self.ui.groupMode.hide();
+			self.ui.showTotalRow.hide();
+			self.ui.pinRowVals.hide();
+			self.ui.columnConfig.hide();
+			self.ui.handlebarsEditor.show();
+			break;
+		}
+	};
+
+	// PivotToolbar {{{1
+
+	var PivotToolbar = makeSubclass('PivotToolbar', ToolbarSection, function (grid) {
+		var self = this;
+
+		self.super.ctor.apply(self, []);
+		self.ui.root.addClass('wcdv_toolbar_section');
+
+		self.grid = grid;
+
+		var aggSpec;
+
+		grid.view.on('aggregateSet', function (a) {
+			aggSpec = deepCopy(a);
+		});
+
+		self.ui.showTotals = makeToggleCheckbox(
+			grid.defn,
+			['table', 'whenPivot', 'showTotalCol'],
+			true,
+			'Total Row/Column',
+			self.ui.root,
+			function (isChecked) {
+				var agg = grid.view.getAggregate();
+
+				if (!isChecked) {
+					aggSpec = deepCopy(agg);
+					delete agg.group;
+					delete agg.pivot;
+					delete agg.all;
+				}
+				else {
+					agg.group = aggSpec.group;
+					agg.pivot = aggSpec.pivot;
+					agg.all = aggSpec.all;
+				}
+
+				grid.view.setAggregate(agg, {
+					sendEvent: false
+				});
+			}
+		);
+
+		self.ui.pinRowVals = makeToggleCheckbox(
+			grid.defn,
+			['table', 'whenGroup', 'pinRowvals'],
+			false,
+			'Pin Groups',
+			self.ui.root,
+			function (isChecked) {
+				grid.redraw();
+			}
+		);
+
+		self.ui.handlebarsEditor = jQuery('<button>', {
+			'type': 'button'
+		})
+			.append(fontAwesome('fa-pencil'))
+			.append('Handlebars Editor')
+			.on('click', function (evt) {
+				grid.handlebarsEditor.show();
+			})
+			.appendTo(self.ui.root)
+		;
+	});
+
+	// #update {{{2
+
+	PivotToolbar.prototype.update = function () {
+		var self = this;
+
+		switch (self.grid.rendererName) {
+		case 'table':
+			self.ui.showTotals.show();
+			self.ui.pinRowVals.show();
+			self.ui.handlebarsEditor.hide();
+			break;
+		case 'handlebars':
+			self.ui.showTotals.hide();
+			self.ui.pinRowVals.hide();
+			self.ui.handlebarsEditor.show();
+			break;
+		}
+	};
+
+	// PrefsToolbar {{{1
+
+	var PrefsToolbar = makeSubclass('PrefsToolbar', ToolbarSection, function (grid) {
+		var self = this;
+
+		self.super.ctor.apply(self, []);
+		self.ui.root.addClass('wcdv_toolbar_section');
+
+		self.grid = grid;
+
+		var div = jQuery('<div>')
+			.addClass('wcdv_toolbar_view')
+			.css({'display': 'inline-block'})
+			.appendTo(self.ui.root)
+		;
+
+		var options = {};
+
+		var showHideBtns = function () {
+			var p = grid.prefs.getPerspective(dropdown.val());
+
+			if (p == null) {
+				throw new Error('No such perspective: ' + dropdown.val());
+			}
+
+			if (p.opts.isTemporary) {
+				saveAsBtn.show();
+			}
+			else {
+				saveAsBtn.hide();
+			}
+
+			if (p.opts.isEssential) {
+				renameBtn.hide();
+				deleteBtn.hide();
+			}
+			else {
+				renameBtn.show();
+				deleteBtn.show();
+			}
+		};
+
+		// Clicking this button will reset all preferences back to the initial set (i.e. just "Main
+		// Perspective" and no changes in the view from its default).  Perhaps useful when you have too
+		// many different perspectives set, but I feel better having it as a safety in case your prefs
+		// somehow get really messed up and don't work at all anymore.  This button is always shown.
+
+		var resetBtn = jQuery('<button>', {'type': 'button', 'title': 'Reset'})
+			.addClass('wcdv_icon_button wcdv_text-primary')
+			.append(fontAwesome('fa-undo'))
+			.on('click', function () {
+				grid.prefs.reset();
+			})
+			.appendTo(div)
+		;
+
+		var backBtn = jQuery('<button>', {'type': 'button'})
+			.append(fontAwesome('fa-chevron-circle-left'))
+			.attr('title', 'Back')
+			.attr('disabled', true)
+			.addClass('wcdv_icon_button wcdv_text-primary')
+			.on('click', function () {
+				grid.prefs.back();
+			})
+			.appendTo(div)
+		;
+
+		var forwardBtn = jQuery('<button>', {'type': 'button'})
+			.append(fontAwesome('fa-chevron-circle-right'))
+			.attr('title', 'Forward')
+			.attr('disabled', true)
+			.addClass('wcdv_icon_button wcdv_text-primary')
+			.on('click', function () {
+				grid.prefs.forward();
+			})
+			.appendTo(div)
+		;
+
+		/*
+		var historyBtn = jQuery(fontAwesome('fa-clock-o', 'wcdv_button', 'History'))
+			.on('click', function () {
+				grid.prefs._historyDebug();
+			})
+			.appendTo(div)
+		;
+		*/
+
+		// Dropdown of all the available perspectives, plus an entry that (when selected) prompts for the
+		// name of a new perspective.
+
+		var dropdown = jQuery('<select>')
+			.append(jQuery('<option>', { value: 'NEW' }).text('New Perspective...'))
+			.on('change', function (evt) {
+				if (dropdown.val() === 'NEW') {
+					var name = prompt('Enter new perspective name', grid.prefs.currentPerspective.name);
+					if (name) {
+						grid.prefs.addPerspective(null, name);
+						grid.prefs.save();
+					}
+					else {
+						// User cancelled the dialog, so just put the dropdown back to whatever the current
+						// perspective is.
+						dropdown.val(grid.prefs.currentPerspective.id);
+					}
+					return;
+				}
+
+				grid.prefs.setCurrentPerspective(dropdown.val());
+				showHideBtns();
+			})
+			.appendTo(div)
+		;
+
+		var warnMsgText = jQuery('<span>');
+
+		var warnMsgContent = jQuery('<div>')
+			.append(fontAwesome('fa-info-circle').css('padding-right', '0.25em').addClass('wcdv_text-primary'))
+			.append(warnMsgText);
+
+		var warnMsg = fontAwesome('fa-info-circle', 'wcdv_info_icon')
+			.attr({'title': 'Info'})
+			.hide()
+			.tooltip({
+				classes: {
+					'ui-tooltip': 'ui-corner-all ui-widget-shadow wcdv_info_tooltip wcdv_border-primary'
+				},
+				show: { delay: 1000 },
+				content: warnMsgContent,
+			})
+			.appendTo(div)
+		;
+
+		if (grid.prefs.backend instanceof PrefsBackendTemporary) {
+			warnMsgText.text('The preferences system is not configured to permanently save perspectives.');
+			warnMsg.show();
+		}
+
+		var saveAsBtnTooltipContent = jQuery('<div>')
+			.append(fontAwesome('fa-info-circle').css('padding-right', '0.25em').addClass('wcdv_text-primary'))
+			.append('This pre-defined perspective cannot be saved with this name.  Click to save with a new name.  After that, any changes will be saved under the new name.');
+
+		var saveAsBtn = jQuery('<button>', {'type': 'button', 'title': 'Save As...'})
+			.append(fontAwesome('fa-save'))
+			.addClass('wcdv_icon_button wcdv_text-primary')
+			.tooltip({
+				classes: {
+					'ui-tooltip': 'ui-corner-all ui-widget-shadow wcdv_info_tooltip wcdv_border-primary'
+				},
+				show: { delay: 1000 },
+				content: saveAsBtnTooltipContent
+			})
+			.on('click', function () {
+				var name = prompt('Enter new perspective name', grid.prefs.currentPerspective.name);
+				if (name != null) {
+					grid.prefs.addPerspective(name);
+					grid.prefs.save();
+				}
+			})
+			.appendTo(div)
+		;
+
+		var saveBtnTooltipContent = jQuery('<div>')
+			.append(fontAwesome('fa-info-circle').css('padding-right', '0.25em').addClass('wcdv_text-primary'))
+			.append('Click to save the current configuration.  The next time this grid is visited, the previously saved configuration will automatically be used.');
+
+		var saveBtn = jQuery('<button>', {'type': 'button', 'title': 'Save'})
+			.append(fontAwesome('fa-save'))
+			.addClass('wcdv_icon_button wcdv_text-primary')
+			.hide()
+			.tooltip({
+				classes: {
+					'ui-tooltip': 'ui-corner-all ui-widget-shadow wcdv_info_tooltip wcdv_border-primary'
+				},
+				show: { delay: 1000 },
+				content: saveBtnTooltipContent
+			})
+			.on('click', function () {
+				grid.prefs.reallySave();
+			})
+			.appendTo(div)
+		;
+
+		// Clicking this button will show a prompt to rename the currently selected perspective.  If you
+		// cancel the prompt, nothing will happen.  This button is only shown when the currently selected
+		// perspective is not "Main Perspective" as it cannot be renamed.
+		//
+		// XXX: What if the user types in the name of an existing perspective?
+		// XXX: What if the user types in "Main Perspective" ?
+		// XXX: What if the user types in "NEW" ?
+
+		var renameBtn = jQuery('<button>', {'type': 'button', 'title': 'Rename'})
+			.addClass('wcdv_icon_button wcdv_text-primary')
+			.append(fontAwesome('fa-pencil'))
+			.on('click', function () {
+				var id = dropdown.val();
+				var p = grid.prefs.getPerspective(id);
+
+				if (p.opts.isEssential) {
+					alert('Cannot rename essential perspective!');
+				}
+				else {
+					var newName = prompt('Rename view "' + p.name + '" to what?');
+					if (newName) {
+						grid.prefs.renamePerspective(id, newName);
+					}
+				}
+			})
+			.appendTo(div)
+		;
+
+		// Clicking this button will delete the currently selected perspective and switch back to "Main
+		// Perspective".  It is only shown when the currently selected perspective is not "Main
+		// Perspective" as it cannot be deleted.
+
+		var deleteBtn = jQuery('<button>', {'type': 'button', 'title': 'Delete'})
+			.addClass('wcdv_icon_button wcdv_text-primary')
+			.append(fontAwesome('fa-trash'))
+			.on('click', function () {
+				grid.prefs.deletePerspective(dropdown.val());
+			})
+			.appendTo(div)
+		;
+
+		// Get the list of available perspectives from the Prefs instance and put them into the dropdown.
+		// The initial perspective will be selected by default.  This DOES NOT actually load that
+		// perspective, it's just for the UI.
+		//
+		// XXX: Is it possible for perspectives to change by some other route so that we need to know
+		// about it to update the UI?
+
+		setTimeout(function () {
+			grid.prefs.prime(function () {
+				grid.prefs.getPerspectives(function (ids) {
+					underscore.each(underscore.sortBy(underscore.map(ids, function (id) {
+						return grid.prefs.getPerspective(id);
+					}), 'name'), function (o) {
+						if (options[o.id] == null) {
+							options[o.id] = jQuery('<option>', { 'value': o.id })
+								.text(o.name)
+								.appendTo(dropdown);
+						}
+					});
+
+					dropdown.val(grid.prefs.currentPerspective.id);
+					showHideBtns();
+				});
+
+				grid.prefs.on('perspectiveAdded', function (id) {
+					if (options[id] == null) {
+						var p = grid.prefs.getPerspective(id);
+						options[id] = jQuery('<option>', { value: id })
+							.text(p.name)
+							.appendTo(dropdown);
+					}
+				}, {
+					info: 'Adding new perspective to dropdown'
+				});
+
+				grid.prefs.on('perspectiveDeleted', function (id) {
+					if (options[id] == null) {
+						throw new Error(sprintf.sprintf('Received `perspectiveDeleted` event that references unknown perspective: id = "%s"', id));
+					}
+					options[id].remove();
+					delete options[id];
+				}, {
+					info: 'Removing perspective from dropdown'
+				});
+
+				grid.prefs.on('perspectiveRenamed', function (id, newName) {
+					if (options[id] == null) {
+						throw new Error(sprintf.sprintf('Received `perspectiveRenamed` event that references unknown perspective: id = "%s"', id));
+					}
+					options[id].text(newName);
+				}, {
+					info: 'Changing perspective name in dropdown'
+				});
+
+				grid.prefs.on('perspectiveChanged', function (id) {
+					if (options[id] == null) {
+						throw new Error(sprintf.sprintf('Received `perspectiveChanged` event that references unknown perspective: id = "%s"', id));
+					}
+					if (grid.prefs.currentPerspective.isUnsaved) {
+						saveBtn.show();
+					}
+					else {
+						saveBtn.hide();
+					}
+					dropdown.val(id);
+					showHideBtns();
+					grid.redraw();
+				}, {
+					info: 'Changing dropdown to reflect new current perspective'
+				});
+
+				grid.prefs.on('prefsReset', function () {
+					underscore.each(options, function (elt) {
+						elt.remove();
+					});
+					options = {};
+				}, {
+					info: 'Deleting all perspectives from the dropdown'
+				});
+
+				grid.prefs.on('prefsChanged', function () {
+					var cp = grid.prefs.currentPerspective;
+					var o = options[cp.id];
+					o.text('[*] ' + cp.name);
+					saveBtn.show();
+				});
+
+				grid.prefs.on('prefsSaved', function () {
+					var cp = grid.prefs.currentPerspective;
+					var o = options[cp.id];
+					o.text(cp.name);
+					saveBtn.hide();
+				});
+
+				grid.prefs.on('prefsHistoryStatus', function (back, forward) {
+					backBtn.attr('disabled', !back);
+					forwardBtn.attr('disabled', !forward);
+				});
+			});
+		});
+	});
+
+	var transTbl = {
+		'en-US': {
+			'SHOWHIDE': 'Show/Hide',
+			'SHOWHIDEOPTS': 'Show/Hide Options'
+		}
+	};
+
+	var trans = function (k) {
+		var lang = navigator.language
+			, tbl = transTbl[lang] || transTbl['en-US'];
+
+		return tbl[k] || k;
+	};
+
+	// Imports {{{1
 
 	// Grid {{{1
 	// JSDoc Types {{{2
@@ -35314,10 +38888,23 @@
 	 *
 	 * @property {number} [table.limit.chunkSize=50]
 	 * When using the "more" limit method, how many additional rows to load each time.
+	 *
+	 * @property {object} [table.whenPlain]
+	 * When the data has not been grouped, this is passed as the `opts` parameter to the GridRenderer
+	 * constructor.
+	 *
+	 * @property {object} [table.whenGroup]
+	 * When the data has been grouped, but not pivotted, this is passed as the `opts` parameter to the
+	 * GridRenderer constructor.
+	 *
+	 * @property {object} [table.whenPivot]
+	 * When the data has been pivotted, this is passed as the `opts` parameter to the GridRenderer
+	 * constructor.
 	 */
 
 	/**
-	 * @typedef {object} Grid~ColConfig
+	 * @typedef {object} Grid~FieldColConfig
+	 * Represents the column configuration for a single field.
 	 *
 	 * @property {string} field
 	 * We're configuring the output of this field.
@@ -35358,6 +38945,17 @@
 	 * If true and the type of the field is a string, the value is interpreted as HTML and the resulting
 	 * nodes are inserted into the table result.  When exporting to CSV, the value emitted will be the
 	 * text nodes only.
+	 *
+	 * @property {string} [maxHeight]
+	 * If present, sets the maximum height allowed for the cell, and puts a "fullscreen" icon button in
+	 * the top-right which will pop open a window showing the full value.  Useful for extremely long
+	 * pieces of data that would otherwise blow up the table.  Only works in plain output.
+	 */
+
+	/**
+	 * @typedef {OrdMap.<string, Grid~FieldColConfig>} Grid~ColConfig
+	 * A collection of configurations across all the available fields in the grid.  If a field isn't in
+	 * this object, then it might as well not exist.
 	 */
 
 	/**
@@ -35447,6 +39045,16 @@
 	 * @property {boolean} _isIdle
 	 * If true, then the grid currently has no pending operations that would require the UI to change.
 	 *
+	 * @property {Grid~ColConfig} colConfig
+	 *
+	 * @property {string} colConfigSource
+	 * Where the column configuration came from, recognized values are: `defn`, `typeinfo`.
+	 *
+	 * @property {boolean} colConfigRestricted
+	 * If true, then the available columns in column configuration are restricted and cannot be added to
+	 * via the source or user preferences.  In other words, the set of available columns is restricted
+	 * to the subset specified via the grid definition.
+	 *
 	 * @borrows GridTable#getSelection
 	 * @borrows GridTable#setSelection
 	 * @borrows GridTable#select
@@ -35475,14 +39083,16 @@
 		defn = defn || {};
 		self._normalize(defn);
 
-		debug.info('GRID', 'Definition: %O', defn);
+		self.debug(null, 'Definition: %O', defn);
 
 		if (!(view instanceof View)) {
 			throw new Error('Call Error: `view` must be an instance of MIE.WC_DataVis.View');
 		}
 
 		deepDefaults(true, tagOpts, {
-			runImmediately: true
+			runImmediately: true,
+			showToolbar: true,
+			showControls: false,
 		});
 
 		self.defn = defn; // Definition used to retrieve data and output grid.
@@ -35506,15 +39116,18 @@
 			self.prefs = defn.prefs;
 		}
 		else if (self.view.prefs != null) {
-			debug.info('GRID (' + self.id + ') // PREFS', 'Using prefs from connected view');
+			self.debug('PREFS', 'Using prefs from connected view');
 			self.prefs = self.view.prefs;
 		}
 		else {
-			debug.info('GRID (' + self.id + ') // PREFS', 'Creating new prefs');
+			self.debug('PREFS', 'Creating new prefs');
 			self.prefs = new Prefs(self.id);
 		}
 
 		self.colConfigWin = new ColConfigWin(self, self.colConfig);
+		self.handlebarsEditor = new HandlebarsEditor(self, function () {
+			self.redraw();
+		});
 
 		/*
 		 * Set up other container elements.
@@ -35528,6 +39141,13 @@
 
 		if (self.ui.root.height() !== 0) {
 			self.rootHasFixedHeight = true;
+			self.rootHeight = self.ui.root.height();
+			// When using TableTool, we can't just set the height of the whole grid and use flex to control
+			// the height of the table automatically.  See DV-196.
+			// Remove the height CSS property here, so the renderer can use it for data-ttheight instead.
+			if (self.features.floatingHeader && self.defn.table.floatingHeader.method === 'tabletool' && window.TableTool != null) {
+				self.ui.root.css('height', '');
+			}
 		}
 
 		if (self.view.source.origin instanceof FileSource) {
@@ -35537,10 +39157,21 @@
 		}
 
 		self.ui.titlebar = jQuery('<div class="wcdv_grid_titlebar">')
-			.attr('title', MIE.trans('SHOWHIDE'))
+			.attr('title', trans('SHOWHIDE'))
 			.on('click', function (evt) {
 				evt.stopPropagation();
 				self.toggle();
+			})
+			.droppable({
+				accept: '.wcdv_drag_handle',
+				over: function (evt, ui) {
+					self.showControls();
+
+					// Need to recalculate the position of the droppable targets, because they are now
+					// guaranteed to be visible (they may have been hidden within the grid control before).
+
+					ui.draggable.draggable('option', 'refreshPositions', true);
+				}
 			})
 			.appendTo(self.ui.root);
 
@@ -35555,7 +39186,7 @@
 			.droppable({
 				accept: '.wcdv_drag_handle',
 				over: function (evt, ui) {
-					self.ui.controls.show();
+					self.showControls();
 
 					// Need to recalculate the position of the droppable targets, because they are now
 					// guaranteed to be visible (they may have been hidden within the grid control before).
@@ -35566,44 +39197,45 @@
 			.appendTo(self.ui.content)
 		;
 
-		self.ui.toolbar_prefs = jQuery('<div>')
-			.addClass('wcdv_toolbar_section')
-			.appendTo(self.ui.toolbar);
-		self._addPrefsButtons(self.ui.toolbar_prefs);
+		self.ui.toolbar_prefs = new PrefsToolbar(self);
+		self.ui.toolbar_prefs.attach(self.ui.toolbar);
 
 		self.prefs.bind('grid', self, {
-			toolbar: self.ui.toolbar_prefs
+			toolbar: self.ui.toolbar_prefs.ui.root
 		});
 
-		self.ui.toolbar_plain = jQuery('<div>')
-			.addClass('wcdv_toolbar_section')
-			.hide()
-			.appendTo(self.ui.toolbar);
-		self._addPlainButtons(self.ui.toolbar_plain);
+		self.ui.toolbar_plain = new PlainToolbar(self);
+		self.ui.toolbar_plain.attach(self.ui.toolbar);
+		self.ui.toolbar_plain.hide();
 
-		self.ui.toolbar_group = jQuery('<div>')
-			.addClass('wcdv_toolbar_section')
-			.hide()
-			.appendTo(self.ui.toolbar);
-		self._addGroupButtons(self.ui.toolbar_group);
+		self.ui.toolbar_group = new GroupToolbar(self);
+		self.ui.toolbar_group.attach(self.ui.toolbar);
+		self.ui.toolbar_group.hide();
 
-		self.ui.toolbar_pivot = jQuery('<div>')
-			.addClass('wcdv_toolbar_section')
-			.hide()
-			.appendTo(self.ui.toolbar);
-		self._addPivotButtons(self.ui.toolbar_pivot);
+		self.ui.toolbar_pivot = new PivotToolbar(self);
+		self.ui.toolbar_pivot.attach(self.ui.toolbar);
+		self.ui.toolbar_pivot.hide();
 
 		self.ui.controls = jQuery('<div>', { 'class': 'wcdv_grid_control' });
-		self.ui.filterControl = jQuery('<div>', { 'class': 'wcdv_filter_control' });
-		self.ui.groupControl = jQuery('<div>', { 'class': 'wcdv_group_control' });
-		self.ui.pivotControl = jQuery('<div>', { 'class': 'wcdv_pivot_control' });
-		self.ui.aggregateControl = jQuery('<div>', { 'class': 'wcdv_aggregate_control' });
+		self.ui.filterControl = jQuery('<div>', { 'class': 'wcdv_control_pane wcdv_filter_control' });
+		self.ui.groupControl = jQuery('<div>', { 'class': 'wcdv_control_pane wcdv_group_control' });
+		self.ui.pivotControl = jQuery('<div>', { 'class': 'wcdv_control_pane wcdv_pivot_control' });
+		self.ui.aggregateControl = jQuery('<div>', { 'class': 'wcdv_control_pane wcdv_aggregate_control' });
 		self.ui.grid = jQuery('<div>', { 'id': defn.table.id, 'class': 'wcdv_grid_table' });
 
 		if (self.rootHasFixedHeight) {
-			// This is a trick to make 'flex: 1 1 auto' work right in Firefox, IE, Edge.
-			// Otherwise, the table takes up as much space as it needs and doesn't scroll.
-			self.ui.grid.css('height', '0px');
+			// When using TableTool, we can't just set the height of the whole grid and use flex to control
+			// the height of the table automatically.  See DV-196.
+			// Don't use the height: 0px trick in this situation and let TableTool manage the table height.
+			if (!self.features.floatingHeader || self.defn.table.floatingHeader.method !== 'tabletool') {
+				// This is a trick to make 'flex: 1 1 auto' work right in Firefox, IE, Edge.
+				// Otherwise, the table takes up as much space as it needs and doesn't scroll.
+				self.ui.grid.css('height', '0px');
+			}
+		}
+
+		if (!self.tagOpts.showToolbar) {
+			self.ui.toolbar.hide();
 		}
 
 		if (!self.tagOpts.showControls) {
@@ -35648,13 +39280,13 @@
 			connectWith: '#' + self.pivotControl.getListElement().attr('id')
 		})
 			.on('sortupdate', function () {
-				self.groupControl.updateView();
+				self.groupControl.sortableSync();
 			});
 		self.pivotControl.getListElement().sortable({
 			connectWith: '#' + self.groupControl.getListElement().attr('id')
 		})
 			.on('sortupdate', function () {
-				self.pivotControl.updateView();
+				self.pivotControl.sortableSync();
 			});
 
 		// Aggregate Control
@@ -35668,16 +39300,12 @@
 		if (self.rootHasFixedHeight) {
 			self.ui.grid.css({ 'overflow': 'auto' });
 		}
-		else if (!self.features.floatingHeader || self.defn.table.floatingHeader.method !== 'tabletool') {
-			self.ui.grid.css({ 'overflow-x': 'auto' });
-		}
 
 		if (document.getElementById(id + '_footer')) {
 			// There was a footer which was printed out by dashboard.c which we are now going to move
 			// inside the structure that we've been creating.
 
-			self.ui.footer = jQuery(document.getElementById(id + '_footer'))
-				.css('display', 'block');
+			self.ui.footer = jQuery(document.getElementById(id + '_footer'));
 		}
 
 		self.ui.root
@@ -35693,8 +39321,18 @@
 				.append(self.ui.footer))
 		;
 
+		var initialRender = true;
+
 		self.tableDoneCont = function (grid, srcIndex) {
-			debug.info('GRID', 'Finished drawing grid table!');
+			self.debug(null, 'Finished drawing grid table!');
+
+			// This just makes sure that we populate the "views" dropdown.  It's only needed the very
+			// first time that we show the grid.  Subsequent refreshes may call this code again, but
+			// there's no need to change the view dropdown when that happens.
+
+			if (initialRender) {
+				initialRender = false;
+			}
 
 			// Invoke the callback for the Grid constructor, after the grid has been created.  Sometimes
 			// people want to start manipulating the grid from JS right away.
@@ -35704,26 +39342,65 @@
 			}
 		};
 
-		self.view.on(View.events.fetchDataBegin, function () {
+		self.view.on('fetchDataBegin', function () {
 			self._setSpinner('loading');
 			self._showSpinner();
+			if (self.tagOpts.title) {
+				self.ui.title._addTrailing(',');
+				self.ui.statusSpan.show().text('Loading...');
+				self.ui.rowCount.hide();
+			}
+			if (self.view.source.isCancellable()) {
+				self.ui.cancelFetchBtn.show();
+			}
 		});
-		self.view.on(View.events.fetchDataEnd, function () {
+		self.view.on('fetchDataEnd', function () {
 			self._hideSpinner();
+			self.ui.cancelFetchBtn.hide();
+			self.ui.statusSpan.show().text('Loaded');
+		});
+		self.view.source.on('fetchDataCancel', function () {
+			self.ui.cancelFetchBtn.hide();
+			if (initialRender) {
+				if (self.tagOpts.title) {
+					self.ui.title._addTrailing(',');
+					self.ui.statusSpan.show().text('Not Loaded');
+					self.ui.rowCount.hide();
+				}
+				self._setSpinner('not-loaded');
+				self.hasRun = false;
+				self.hide();
+			}
+			else {
+				if (self.tagOpts.title) {
+					self.ui.title._addTrailing(',');
+					self.ui.statusSpan.hide();
+					self.ui.rowCount.show();
+				}
+				self._hideSpinner();
+			}
 		});
 
-		self.view.on(View.events.workBegin, function () {
+		self.view.on('workBegin', function () {
 			self._isIdle = false;
 			self._setSpinner('working');
 			self._showSpinner();
+			if (self.tagOpts.title) {
+				self.ui.title._addTrailing(',');
+				self.ui.statusSpan.show().text('Processing...');
+				self.ui.rowCount.hide();
+			}
 		});
-		self.view.on(View.events.workEnd, function (info, ops) {
+		self.view.on('workEnd', function (info, ops) {
 			self._isIdle = true;
 			self._hideSpinner();
+			self.ui.title._stripTrailing(',');
+			self.ui.statusSpan.hide();
+			self.ui.rowCount.show();
 			self._updateRowCount(info, ops);
 		});
 
-		self.view.on(View.events.dataUpdated, function () {
+		self.view.on('dataUpdated', function () {
 			if (self.tagOpts.showOnDataChange && !self.isVisible()) {
 				self.show({ redraw: false });
 			}
@@ -35746,11 +39423,25 @@
 		 * Store self object so it can be accessed from other JavaScript in the page.
 		 */
 
-		window.MIE.WC_DataVis.grids = window.MIE.WC_DataVis.grids || {};
-		window.MIE.WC_DataVis.grids[id] = self;
+		setProp(self, window, 'MIE', 'WC_DataVis', 'grids', id);
 	});
 
-	// Events {{{2
+	// Mixins {{{2
+
+	mixinEventHandling(Grid, [
+			'showControls'
+		, 'hideControls'
+		, 'renderBegin'
+		, 'renderEnd'
+		, 'colConfigUpdate'
+		, 'selectionChange'
+	]);
+
+	delegate(Grid, 'renderer', ['setSelection', 'getSelection', 'select', 'unselect', 'isSelected']);
+
+	mixinDebugging(Grid);
+
+	// Events JSDoc {{{3
 
 	/**
 	 * Fired when controls are shown in the grid.
@@ -35791,18 +39482,19 @@
 	 * Data from rows that are selected.
 	 */
 
-	mixinEventHandling(Grid, 'Grid', [
-			'showControls'
-		, 'hideControls'
-		, 'renderBegin'
-		, 'renderEnd'
-		, 'colConfigUpdate'
-		, 'selectionChange'
-	]);
+	// #toString {{{2
 
-	// Delegate {{{2
+	Grid.prototype.toString = function () {
+		var self = this;
+		return 'Grid (' + self.id + ')';
+	};
 
-	delegate(Grid, 'renderer', ['setSelection', 'getSelection', 'select', 'unselect', 'isSelected']);
+	// #getDebugTag {{{2
+
+	Grid.prototype.getDebugTag = function () {
+		var self = this;
+		return 'GRID {id="' + self.id + '"}';
+	};
 
 	// #_validateFeatures {{{2
 
@@ -35840,7 +39532,7 @@
 			self.features[feat] = getPropDef(false, self.defn, 'table', 'features', feat);
 		});
 
-		debug.info('GRID', 'Features =', self.features);
+		self.debug(null, 'Features =', self.features);
 	};
 
 	// #_validateId {{{2
@@ -35908,37 +39600,47 @@
 			})
 			.appendTo(titlebar);
 
-		if (typeof self.tagOpts.helpText === 'string' && self.tagOpts.helpText !== '') {
-			notHeader.append(' ');
-			jQuery(fontAwesome('F059'))
-				.jqxTooltip({
-					content: self.tagOpts.helpText,
-					width: '400',
-					autoHideDelay: 10000,
-					opacity: 1
-				})
-				.appendTo(notHeader);
-		}
-
 		notHeader.append(' ');
 
+		self.ui.statusSpan = jQuery('<span>').appendTo(notHeader);
 		self.ui.rowCount = jQuery('<span>').appendTo(notHeader);
 		self.ui.selectionInfo = jQuery('<span>').appendTo(notHeader);
 
 		self.ui.clearFilter = jQuery('<span>')
 			.hide()
 			.append(' (')
-			.append(
-							jQuery('<span>', {'class': 'link'})
-							.text('clear filter')
-							.on('click', function (evt) {
-								evt.stopPropagation();
-								self.ui.clearFilter.hide();
-								self.view.clearFilter({ notify: true });
-							})
-			)
+			.append(jQuery('<span>', {'class': 'link'})
+				.text('clear filter')
+				.on('click', function (evt) {
+					evt.stopPropagation();
+					self.ui.clearFilter.hide();
+					self.view.clearFilter({ notify: true });
+				}))
 			.append(')')
 			.appendTo(notHeader);
+
+		self.ui.cancelFetchBtn = jQuery('<button>', {'type': 'button'})
+			.css({'margin-left': '0.5em'})
+			.text('Cancel')
+			.on('click', function (evt) {
+				evt.stopPropagation();
+				self.view.source.cancel();
+			})
+			.hide()
+			.appendTo(notHeader);
+
+		if (typeof self.tagOpts.helpText === 'string' && self.tagOpts.helpText !== '') {
+			notHeader.append(' ');
+			fontAwesome('F059')
+				.tooltip({
+					classes: {
+						'ui-tooltip': 'ui-corner-all ui-widget-shadow wcdv_info_tooltip wcdv_border-primary'
+					},
+					show: { delay: 1000 },
+					content: self.tagOpts.helpText
+				})
+				.appendTo(notHeader);
+		}
 
 		// Create container to hold all the controls in the titlebar
 
@@ -36012,19 +39714,18 @@
 			'style': 'font-size: 18px',
 			'class': 'wcdv_icon_button wcdv_text-primary'
 		})
-			.attr('title', MIE.trans('SHOWHIDEOPTS'))
+			.attr('title', trans('SHOWHIDEOPTS'))
 			.click(function (evt) {
 				evt.stopPropagation();
 				if (evt.shiftKey) {
-					var p = self.prefs.getPerspective(self.prefs.currentPerspective);
-					if (p.opts.isTemporary) {
+					if (self.prefs.currentPerspective.opts.isTemporary) {
 						pWinWarning.text('This perspective is temporary; the configuration below does not reflect the current state of any bound prefs modules.');
 						pWinWarning.show();
 					}
 					else {
 						pWinWarning.hide();
 					}
-					pWinTextArea.val(JSON.stringify(p.getConfig(), null, 2));
+					pWinTextArea.val(JSON.stringify(self.prefs.currentPerspective.config, null, 2));
 					pWin.dialog('open');
 				}
 				else {
@@ -36042,7 +39743,7 @@
 			'style': 'font-size: 18px',
 			'class': 'wcdv_icon_button wcdv_text-primary showhide'
 		})
-			.attr('title', MIE.trans('SHOWHIDE'))
+			.attr('title', trans('SHOWHIDE'))
 			.click(function (evt) {
 				evt.stopPropagation();
 				self.toggle();
@@ -36050,480 +39751,6 @@
 			.append(jQuery(fontAwesome('f078')))
 			.appendTo(self.ui.titlebar_controls)
 		;
-	};
-
-	// #_addPlainButtons {{{2
-
-	/**
-	 * Add plain-related controls to the grid's toolbar.
-	 *
-	 * @method
-	 *
-	 * @param {jQuery} toolbar
-	 * Toolbar section that will contain the buttons.
-	 */
-
-	Grid.prototype._addPlainButtons = function (toolbar) {
-		var self = this;
-
-		if (self.features.limit) {
-			self.ui.limit_div = jQuery('<div>').css({'display': 'inline-block'}).appendTo(toolbar);
-
-			// Create a checkbox that will toggle the "automatically show more" feature for the grid table.
-
-			makeToggleCheckbox(self.defn, ['table', 'limit', 'autoShowMore'], true, 'Show More on Scroll', self.ui.limit_div);
-
-			// Create a button that will show all the rows when clicked.  We fake this a little bit by just
-			// turning off the "limit" feature and letting the grid table be redrawn (changing the features
-			// causes it to be redrawn).
-			//
-			// TODO: This should disable the "automatically show more" checkbox (need to make sure it gets
-			// re-enabled if we switch grid tables and come back - as "limit" feature will be reset to its
-			// default value).
-
-			jQuery('<button>', {'type': 'button'})
-				.on('click', function (evt) {
-					self.renderer.updateFeatures({
-						'block': true,
-						'progress': true,
-						'limit': false
-					});
-				})
-				.text('Show All Rows')
-				.appendTo(self.ui.limit_div)
-			;
-		}
-
-		jQuery('<button>', {
-			'type': 'button'
-		})
-			.append(fontAwesome('fa-columns'))
-			.append('Columns')
-			.on('click', function (evt) {
-				self.colConfigWin.show(self.ui.controls, function (colConfig) {
-					self.setColConfig(colConfig, {
-						from: 'colConfigWin'
-					});
-				});
-			})
-			.appendTo(toolbar)
-		;
-	};
-
-	// #_addGroupButtons {{{2
-
-	/**
-	 * Add group-related controls to the grid's toolbar.
-	 *
-	 * @method
-	 *
-	 * @param {jQuery} toolbar
-	 * Toolbar section that will contain the buttons.
-	 */
-
-	Grid.prototype._addGroupButtons = function (toolbar) {
-		var self = this;
-		var aggSpec;
-		var showTotalRow, colConfigWinBtn;
-
-		var enableDisable = function (selected) {
-			switch (selected) {
-			case 'summary':
-				showTotalRow.prop('disabled', false);
-				colConfigWinBtn.prop('disabled', true);
-				break;
-			case 'detail':
-				showTotalRow.prop('disabled', true);
-				colConfigWinBtn.prop('disabled', false);
-				break;
-			}
-		};
-
-		// Create radio buttons to switch between summary and detail group grid tables.
-
-		makeRadioButtons(
-			self.defn
-			, ['table', 'groupMode']
-			, 'detail'
-			, null
-			, 'groupOutput'
-			, [{label: 'Summary', value: 'summary'}
-				, {label: 'Detail', value: 'detail'}]
-			, null
-			, function (selected) {
-				enableDisable(selected);
-				self.redraw();
-			}
-			, toolbar
-		);
-
-		self.view.on(View.events.aggregateSet, function (a) {
-			aggSpec = deepCopy(a);
-		});
-
-		showTotalRow = makeToggleCheckbox(
-			self.defn,
-			['table', 'whenGroup', 'showTotalRow'],
-			true,
-			'Total Row',
-			toolbar,
-			function (isChecked) {
-				var agg = self.view.getAggregate();
-
-				if (!isChecked) {
-					aggSpec = deepCopy(agg);
-					delete agg.all;
-				}
-				else {
-					agg.all = aggSpec.all;
-				}
-
-				self.view.setAggregate(agg, {
-					sendEvent: false
-				});
-			}
-		);
-
-		colConfigWinBtn = jQuery('<button>', {
-			'type': 'button'
-		})
-			.append(fontAwesome('fa-columns'))
-			.append('Columns')
-			.on('click', function (evt) {
-				self.colConfigWin.show(self.ui.controls, function (colConfig) {
-					self.setColConfig(colConfig);
-				});
-			})
-			.appendTo(toolbar)
-		;
-
-		enableDisable(self.defn.table.groupMode);
-	};
-
-	// #_addPivotButtons {{{2
-
-	/**
-	 * Add pivot-related controls to the grid's toolbar.
-	 *
-	 * @method
-	 *
-	 * @param {jQuery} toolbar
-	 * Toolbar section that will contain the buttons.
-	 */
-
-	Grid.prototype._addPivotButtons = function (toolbar) {
-		var self = this;
-		var aggSpec;
-
-		self.view.on(View.events.aggregateSet, function (a) {
-			aggSpec = deepCopy(a);
-		});
-
-		makeToggleCheckbox(
-			self.defn,
-			['table', 'whenPivot', 'showTotalCol'],
-			true,
-			'Total Row/Column',
-			toolbar,
-			function (isChecked) {
-				var agg = self.view.getAggregate();
-
-				if (!isChecked) {
-					aggSpec = deepCopy(agg);
-					delete agg.group;
-					delete agg.pivot;
-					delete agg.all;
-				}
-				else {
-					agg.group = aggSpec.group;
-					agg.pivot = aggSpec.pivot;
-					agg.all = aggSpec.all;
-				}
-
-				self.view.setAggregate(agg, {
-					sendEvent: false
-				});
-			}
-		);
-	};
-
-	// #_addPrefsButtons {{{2
-
-	/**
-	 * Add preference-related controls to the grid's toolbar.
-	 *
-	 * @method
-	 *
-	 * @param {jQuery} toolbar
-	 * Toolbar section that will contain the buttons.
-	 */
-
-	Grid.prototype._addPrefsButtons = function (toolbar) {
-		var self = this;
-
-		var div = jQuery('<div>')
-			.addClass('wcdv_toolbar_view')
-			.css({'display': 'inline-block'})
-			.appendTo(toolbar)
-		;
-
-		var options = {};
-
-		var showHideBtns = function () {
-			var p = self.prefs.getPerspective(dropdown.val());
-
-			if (p == null) {
-				throw new Error('No such perspective: ' + dropdown.val());
-			}
-
-			if (p.opts.isTemporary) {
-				saveBtn.show();
-			}
-			else {
-				saveBtn.hide();
-			}
-
-			if (p.opts.isEssential) {
-				renameBtn.hide();
-				deleteBtn.hide();
-			}
-			else {
-				renameBtn.show();
-				deleteBtn.show();
-			}
-		};
-
-		// Clicking this button will reset all preferences back to the initial set (i.e. just "Main
-		// Perspective" and no changes in the view from its default).  Perhaps useful when you have too
-		// many different perspectives set, but I feel better having it as a safety in case your prefs
-		// somehow get really messed up and don't work at all anymore.  This button is always shown.
-
-		var resetBtn = jQuery('<button>', {'type': 'button', 'title': 'Reset'})
-			.addClass('wcdv_icon_button wcdv_text-primary')
-			.append(fontAwesome('fa-undo'))
-			.on('click', function () {
-				self.prefs.reset();
-			})
-			.appendTo(div)
-		;
-
-		var backBtn = jQuery('<button>', {'type': 'button'})
-			.append(fontAwesome('fa-chevron-circle-left'))
-			.attr('title', 'Back')
-			.attr('disabled', true)
-			.addClass('wcdv_icon_button wcdv_text-primary')
-			.on('click', function () {
-				self.prefs.back();
-			})
-			.appendTo(div)
-		;
-
-		var forwardBtn = jQuery('<button>', {'type': 'button'})
-			.append(fontAwesome('fa-chevron-circle-right'))
-			.attr('title', 'Forward')
-			.attr('disabled', true)
-			.addClass('wcdv_icon_button wcdv_text-primary')
-			.on('click', function () {
-				self.prefs.forward();
-			})
-			.appendTo(div)
-		;
-
-		/*
-		var historyBtn = jQuery(fontAwesome('fa-clock-o', 'wcdv_button', 'History'))
-			.on('click', function () {
-				self.prefs._historyDebug();
-			})
-			.appendTo(div)
-		;
-		*/
-
-		// Dropdown of all the available perspectives, plus an entry that (when selected) prompts for the
-		// name of a new perspective.
-
-		var dropdown = jQuery('<select>')
-			.append(jQuery('<option>', { value: 'NEW' }).text('New Perspective...'))
-			.on('change', function (evt) {
-				if (dropdown.val() === 'NEW') {
-					var name = prompt('Enter new perspective name', self.prefs.currentPerspective.name);
-					if (name) {
-						self.prefs.addPerspective(null, name);
-						self.prefs.save();
-					}
-					else {
-						// User cancelled the dialog, so just put the dropdown back to whatever the current
-						// perspective is.
-						dropdown.val(self.prefs.currentPerspective.id);
-					}
-					return;
-				}
-
-				self.prefs.setCurrentPerspective(dropdown.val());
-				showHideBtns();
-			})
-			.appendTo(div)
-		;
-
-		var warnMsgText = jQuery('<span>');
-
-		var warnMsgContent = jQuery('<div>')
-			.append(fontAwesome('fa-info-circle').css('padding-right', '0.25em').addClass('wcdv_text-primary'))
-			.append(warnMsgText);
-
-		var warnMsg = fontAwesome('fa-info-circle', 'wcdv_info_icon')
-			.attr({'title': 'Info'})
-			.hide()
-			.tooltip({
-				classes: {
-					'ui-tooltip': 'ui-corner-all ui-widget-shadow wcdv_info_tooltip wcdv_border-primary'
-				},
-				show: { delay: 1000 },
-				content: warnMsgContent,
-			})
-			.appendTo(div)
-		;
-
-		if (self.prefs.backend instanceof PrefsBackendTemporary) {
-			warnMsgText.text('The preferences system is not configured to permanently save perspectives.');
-			warnMsg.show();
-		}
-
-		var saveBtnTooltipContent = jQuery('<div>')
-			.append(fontAwesome('fa-info-circle').css('padding-right', '0.25em').addClass('wcdv_text-primary'))
-			.append('This pre-defined perspective cannot be saved with this name.  Click to save with a new name.  After that, any changes will be saved under the new name.');
-
-		var saveBtn = jQuery('<button>', {'type': 'button', 'title': 'XXX'})
-			.append(fontAwesome('fa-save'))
-			.attr('title', 'Save...')
-			.addClass('wcdv_icon_button wcdv_text-primary')
-			.tooltip({
-				classes: {
-					'ui-tooltip': 'ui-corner-all ui-widget-shadow wcdv_info_tooltip wcdv_border-primary'
-				},
-				show: { delay: 1000 },
-				content: saveBtnTooltipContent
-			})
-			.on('click', function () {
-				var name = prompt('Enter new perspective name', self.prefs.currentPerspective.name);
-				if (name != null) {
-					self.prefs.addPerspective(name);
-					self.prefs.save();
-				}
-			})
-			.appendTo(div)
-		;
-
-		// Clicking this button will show a prompt to rename the currently selected perspective.  If you
-		// cancel the prompt, nothing will happen.  This button is only shown when the currently selected
-		// perspective is not "Main Perspective" as it cannot be renamed.
-		//
-		// XXX: What if the user types in the name of an existing perspective?
-		// XXX: What if the user types in "Main Perspective" ?
-		// XXX: What if the user types in "NEW" ?
-
-		var renameBtn = jQuery('<button>', {'type': 'button', 'title': 'Rename'})
-			.addClass('wcdv_icon_button wcdv_text-primary')
-			.append(fontAwesome('fa-pencil'))
-			.on('click', function () {
-				var id = dropdown.val();
-				var p = self.prefs.getPerspective(id);
-
-				if (p.opts.isEssential) {
-					alert('Cannot rename essential perspective!');
-				}
-				else {
-					var newName = prompt('Rename view "' + p.name + '" to what?');
-					if (newName) {
-						self.prefs.renamePerspective(id, newName);
-					}
-				}
-			})
-			.appendTo(div)
-		;
-
-		// Clicking this button will delete the currently selected perspective and switch back to "Main
-		// Perspective".  It is only shown when the currently selected perspective is not "Main
-		// Perspective" as it cannot be deleted.
-
-		var deleteBtn = jQuery('<button>', {'type': 'button', 'title': 'Delete'})
-			.addClass('wcdv_icon_button wcdv_text-primary')
-			.append(fontAwesome('fa-trash'))
-			.on('click', function () {
-				self.prefs.deletePerspective(dropdown.val());
-			})
-			.appendTo(div)
-		;
-
-		// Get the list of available perspectives from the Prefs instance and put them into the dropdown.
-		// The initial perspective will be selected by default.  This DOES NOT actually load that
-		// perspective, it's just for the UI.
-		//
-		// XXX: Is it possible for perspectives to change by some other route so that we need to know
-		// about it to update the UI?
-
-		setTimeout(function () {
-			self.prefs.prime(function () {
-				self.prefs.getPerspectives(function (ids) {
-					underscore.each(underscore.sortBy(underscore.map(ids, function (id) {
-						return self.prefs.getPerspective(id);
-					}), 'name'), function (o) {
-						if (options[o.id] == null) {
-							options[o.id] = jQuery('<option>', { 'value': o.id })
-								.text(o.name)
-								.appendTo(dropdown);
-						}
-					});
-
-					dropdown.val(self.prefs.currentPerspective.id);
-					showHideBtns();
-				});
-
-				self.prefs.on('perspectiveAdded', function (id) {
-					if (options[id] == null) {
-						var p = self.prefs.getPerspective(id);
-						options[id] = jQuery('<option>', { value: id })
-							.text(p.name)
-							.appendTo(dropdown);
-					}
-				});
-
-				self.prefs.on('perspectiveDeleted', function (id) {
-					if (options[id] == null) {
-						throw new Error(sprintf.sprintf('Received `perspectiveDeleted` event that references unknown perspective: id = "%s"', id));
-					}
-					options[id].remove();
-					delete options[id];
-				});
-
-				self.prefs.on('perspectiveRenamed', function (id, newName) {
-					if (options[id] == null) {
-						throw new Error(sprintf.sprintf('Received `perspectiveRenamed` event that references unknown perspective: id = "%s"', id));
-					}
-					options[id].text(newName);
-				});
-
-				self.prefs.on('perspectiveChanged', function (id) {
-					if (options[id] == null) {
-						throw new Error(sprintf.sprintf('Received `perspectiveChanged` event that references unknown perspective: id = "%s"', id));
-					}
-					dropdown.val(id);
-					showHideBtns();
-					self.redraw();
-				});
-
-				self.prefs.on('prefsReset', function () {
-					underscore.each(options, function (elt) {
-						elt.remove();
-					});
-					options = {};
-				});
-
-				self.prefs.on('prefsHistoryStatus', function (back, forward) {
-					backBtn.attr('disabled', !back);
-					forwardBtn.attr('disabled', !forward);
-				});
-			});
-		});
 	};
 
 	// #clear {{{2
@@ -36552,54 +39779,52 @@
 				, ops = self.view.getLastOps();
 
 			if (ops) {
-				debug.info('GRID', 'Creating grid table with view opertions: %O', ops);
+				self.debug(null, 'Creating grid table with view opertions: %O', ops);
 			}
 
 			if (self.defn.renderer != null) {
+				self.rendererName = self.defn.renderer;
+
 				rendererCtor = GridRenderer.registry.get(self.defn.renderer);
 				rendererCtorOpts = deepCopy(self.defn.rendererOpts);
 			}
-			else if (ops && ops.pivot) {
-				rendererCtor = GridRenderer.registry.get(getPropDef('table_pivot', self.defn, 'whenPivot', 'renderer'));
-				rendererCtorOpts = deepCopy(self.defn.table.whenPivot);
-
-				debug.info('GRID', 'Creating pivot grid table');
-
-				self.ui.toolbar_plain.hide();
-				self.ui.toolbar_group.hide();
-				self.ui.toolbar_pivot.show();
-			}
-			else if (ops && ops.group) {
-				switch (self.defn.table.groupMode) {
-				case 'summary':
-					rendererCtor = GridRenderer.registry.get(getPropDef('table_group_summary', self.defn, 'whenGroup', 'renderer'));
-					break;
-				case 'detail':
-					rendererCtor = GridRenderer.registry.get(getPropDef('table_group_detail', self.defn, 'whenGroup', 'renderer'));
-					break;
-				}
-
-				rendererCtorOpts = deepCopy(self.defn.table.whenGroup);
-
-				debug.info('GRID', 'Creating group grid table');
-
-				self.ui.toolbar_plain.hide();
-				self.ui.toolbar_group.show();
-				self.ui.toolbar_pivot.hide();
-			}
 			else {
-				rendererCtor = GridRenderer.registry.get(getPropDef('table_plain', self.defn, 'whenPlain', 'renderer'));
-				rendererCtorOpts = deepCopy(self.defn.table.whenPlain);
+				self.rendererName = 'table';
 
-				if (self.ui.footer) {
-					rendererCtorOpts.footer = self.ui.footer;
+				if (ops && ops.pivot) {
+					rendererCtor = GridRenderer.registry.get(getPropDef('table_pivot', self.defn, 'whenPivot', 'renderer'));
+					rendererCtorOpts = deepCopy(self.defn.table.whenPivot);
+
+					self.debug(null, 'Creating pivot grid table');
 				}
+				else if (ops && ops.group) {
+					switch (self.defn.table.groupMode) {
+					case 'summary':
+						rendererCtor = GridRenderer.registry.get(getPropDef('table_group_summary', self.defn, 'whenGroup', 'renderer'));
+						break;
+					case 'detail':
+						rendererCtor = GridRenderer.registry.get(getPropDef('table_group_detail', self.defn, 'whenGroup', 'renderer'));
+						break;
+					}
 
-				debug.info('GRID', 'Creating plain grid table');
+					rendererCtorOpts = deepCopy(self.defn.table.whenGroup);
 
-				self.ui.toolbar_plain.show();
-				self.ui.toolbar_group.hide();
-				self.ui.toolbar_pivot.hide();
+					if (self.ui.footer) {
+						rendererCtorOpts.footer = self.ui.footer;
+					}
+
+					self.debug(null, 'Creating group grid table');
+				}
+				else {
+					rendererCtor = GridRenderer.registry.get(getPropDef('table_plain', self.defn, 'whenPlain', 'renderer'));
+					rendererCtorOpts = deepCopy(self.defn.table.whenPlain);
+
+					if (self.ui.footer) {
+						rendererCtorOpts.footer = self.ui.footer;
+					}
+
+					self.debug(null, 'Creating plain grid table');
+				}
 			}
 
 			if (self.renderer) {
@@ -36611,6 +39836,27 @@
 
 			self.ui.exportBtn.attr('disabled', true);
 			self.renderer = new rendererCtor(self, self.defn, self.view, self.features, rendererCtorOpts, self.timing, self.id, self.colConfig);
+
+			// Update the toolbar sections.  This needs to be done after creating the renderer because the
+			// renderer validates (and possibly changes) the supported features, and that changes what parts
+			// of the toolbar we show.  Obviously, we shouldn't show buttons for features that the current
+			// renderer doesn't implement.
+
+			if (ops && ops.pivot) {
+				self.ui.toolbar_plain.hide();
+				self.ui.toolbar_group.hide();
+				self.ui.toolbar_pivot.show();
+			}
+			else if (ops && ops.group) {
+				self.ui.toolbar_plain.hide();
+				self.ui.toolbar_group.show();
+				self.ui.toolbar_pivot.hide();
+			}
+			else {
+				self.ui.toolbar_plain.show();
+				self.ui.toolbar_group.hide();
+				self.ui.toolbar_pivot.hide();
+			}
 
 			self.renderer.on('renderBegin', function () {
 				self._isIdle = false;
@@ -36671,7 +39917,7 @@
 
 		self.prefs.prime(function () {
 			self.view.prime(function () {
-				debug.info('GRID', 'Redrawing...');
+				self.debug(null, 'Redrawing...');
 				makeGridTable();
 			});
 		});
@@ -36693,8 +39939,10 @@
 			return;
 		}
 
+		self.debug(null, 'Refreshing...');
+
 		self._isIdle = false;
-		self.view.clearSourceData();
+		self.view.refresh();
 	};
 
 	// #_updateRowCount {{{2
@@ -36711,7 +39959,7 @@
 		var doingServerFilter = getProp(self.defn, 'server', 'filter') && getProp(self.defn, 'server', 'limit') !== -1;
 		var text = [];
 
-		debug.info('GRID', 'Updating row count');
+		self.debug(null, 'Updating row count');
 
 		// When there's no titlebar, there's nothing for us to do here.
 
@@ -36745,9 +39993,7 @@
 			}
 		}
 
-		if (self.ui.title.text().slice(-1) !== ','){
-			self.ui.title.append(',');
-		}
+		self.ui.title._addTrailing(',');
 	};
 
 	// #hide {{{2
@@ -36762,7 +40008,7 @@
 	Grid.prototype.hide = function () {
 		var self = this;
 
-		debug.info('GRID', 'Hiding...');
+		self.debug(null, 'Hiding...');
 
 		self.ui.content.hide({
 			duration: 0,
@@ -36793,7 +40039,7 @@
 			redraw: true
 		});
 
-		debug.info('GRID', 'Showing...');
+		self.debug(null, 'Showing...');
 
 		self.ui.content.show({
 			duration: 0,
@@ -37136,8 +40382,8 @@
 	 * Set the column configuration.
 	 *
 	 * @param {OrdMap} colConfig
-	 * @param {Object} [opts]
-	 * @param {string} [opts.from]
+	 * @param {Object} opts
+	 * @param {string} opts.from
 	 * @param {boolean} [opts.sendEvent=true]
 	 * @param {Array.<Object>} [opts.dontSendEventTo]
 	 * @param {boolean} [opts.redraw=true]
@@ -37148,6 +40394,10 @@
 		var self = this;
 		var updated = false;
 
+		if (['defn', 'prefs', 'typeInfo', 'ui', 'reset'].indexOf(opts.from) < 0) {
+			throw new Error('Call Error: `opts.from` must be one of: [defn, prefs, typeInfo, ui, reset]');
+		}
+
 		opts = deepDefaults(opts, {
 			sendEvent: true,
 			dontSendEventTo: [],
@@ -37155,22 +40405,137 @@
 			savePrefs: true
 		});
 
+		var setCurrent = function () {
+			self.debug('COLCONFIG', 'Setting from %s: %O', opts.from || '[unknown]', colConfig);
+			self.colConfig = colConfig;
+			self.colConfigSource = opts.from;
+
+			if (self.renderer != null) {
+				self.renderer.colConfig = self.colConfig;
+			}
+
+			self.debug('COLCONFIG', 'Setting shadow from %s: %O', opts.from || '[unknown]', colConfig);
+			self.shadowColConfig = colConfig.clone();
+			updated = true;
+		};
+
+		var setInitial = function () {
+			self.debug('COLCONFIG', 'Setting initial from %s: %O', opts.from || '[unknown]', colConfig);
+			self.initColConfig = colConfig.clone();
+		};
+
+		/**
+		 * Add elements (that are absent in `dst`) from `src` to `dst`.
+		 *
+		 * @param {OrdMap} src
+		 * @param {string} srcMsg
+		 * @param {OrdMap} dst
+		 * @param {string} dstMsg
+		 */
+
+		var addMissing = function (src, srcMsg, dst, dstMsg) {
+			var count = dst.mergeWith(src);
+			self.debug('COLCONFIG', 'Merged %d fields from %s into %s', count, srcMsg, dstMsg);
+			return count;
+		};
+
+		/**
+		 * Remove elements from `dst` that are absent from `src`.
+		 *
+		 * @param {OrdMap} src
+		 * @param {string} srcMsg
+		 * @param {OrdMap} dst
+		 * @param {string} dstMsg
+		 */
+
+		var removeMissing = function (src, srcMsg, dst, dstMsg) {
+			var absent = [];
+
+			dst.each(function (fcc, fieldName) {
+				if (!src.isSet(fieldName)) {
+					absent.push(fieldName);
+				}
+			});
+
+			if (absent.length > 0) {
+				self.debug('COLCONFIG', 'Removing %d fields from %s which are absent from %s: %O',
+					absent.length, dstMsg, srcMsg, absent);
+				underscore.each(absent, function (fieldName) {
+					dst.unset(fieldName);
+				});
+				return true;
+			}
+
+			return false;
+		};
+
+		if (typeof getProp(self.defn, 'advice', 'setColConfig', 'before') === 'function') {
+			self.defn.advice.setColConfig.before(colConfig, opts.from, self);
+		}
+
 		switch (opts.from) {
+		case 'defn':
+			setCurrent();
+			setInitial();
+			self.colConfigRestricted = true;
+			break;
+		case 'prefs':
+			if (self.colConfigRestricted) {
+				self.colConfig.each(function (v, k) {
+					if (colConfig.isSet(k)) {
+						underscore.defaults(colConfig.get(k), v);
+					}
+				});
+
+				// The column configuration is restricted by defn, so remove anything from prefs that's
+				// missing from defn.
+
+				removeMissing(self.colConfig, 'defn', colConfig, 'prefs');
+
+				// Add anything that's in defn but not in prefs.
+
+				addMissing(self.colConfig, 'defn', colConfig, 'prefs');
+			}
+
+			setCurrent();
+			break;
+		case 'reset':
+		case 'ui':
+			setCurrent();
+			break;
 		case 'typeInfo':
+			// Column configuration derived from typeInfo merges with existing config (by removing config on
+			// columns that don't exist in the source, and by adding defaults for columns that exist in the
+			// source but aren't specified in the current config).  It can also set the initial, filling in
+			// when no defn is specified.
+
 			if (self.colConfig == null) {
-				debug.info('GRID // COLCONFIG', 'Setting from typeInfo: %O', colConfig);
-				self.colConfig = colConfig;
-				updated = true;
+				setCurrent();
+			}
+			else {
+				self.colConfig = self.shadowColConfig.clone();
+				if (self.renderer != null) {
+					self.renderer.colConfig = self.colConfig;
+				}
+
+				// Delete fields from existing colConfig which aren't in the source.
+
+				if (removeMissing(colConfig, 'source', self.colConfig, 'existing')) {
+					updated = true;
+				}
+
+				// Add fields from source that are missing from existing colConfig.  Columns set explicitly in
+				// the grid's definition are there to limit what we see, so don't try to add to them.
+
+				if (!self.colConfigRestricted) {
+					if (addMissing(colConfig, 'source', self.colConfig, 'existing')) {
+						updated = true;
+					}
+				}
 			}
 			if (self.initColConfig == null) {
-				debug.info('GRID // COLCONFIG', 'Setting initial from typeInfo: %O', colConfig);
-				self.initColConfig = colConfig.clone();
+				setInitial();
 			}
-			break;
-		default:
-			debug.info('GRID // COLCONFIG', 'Setting from %s: %O', opts.from || '[unknown]', colConfig);
-			self.colConfig = colConfig;
-			updated = true;
 			break;
 		}
 
@@ -37181,12 +40546,13 @@
 		if (opts.savePrefs) {
 			self.prefs.save();
 		}
+
 		self.view.setColConfig(self.colConfig); // TODO Convert to event model.
 
 		if (opts.sendEvent) {
 			self.fire('colConfigUpdate', {
 				notTo: opts.dontSendEventTo
-			}, colConfig);
+			}, self.colConfig);
 		}
 
 		if (opts.redraw) ;
@@ -37205,14 +40571,14 @@
 	Grid.prototype.resetColConfig = function (opts) {
 		var self = this;
 
-		debug.info('GRID // COLCONFIG', 'Resetting to: %O', self.initColConfig);
+		self.debug('COLCONFIG', 'Resetting to: %O', self.initColConfig);
 
 		opts = deepDefaults(opts, {
 			from: 'reset',
 			savePrefs: false
 		});
 
-		self.setColConfig(deepCopy(self.initColConfig), opts);
+		self.setColConfig(self.initColConfig.clone(), opts);
 	};
 
 	// #isIdle {{{2
@@ -37259,807 +40625,12 @@
 			});
 		});
 
-		debug.info('GRID', 'Creating colConfig from typeInfo: %O -> %O', typeInfo.asMap(), typeInfoColConfig.asMap());
+		self.debug(null, 'Creating colConfig from typeInfo: %O -> %O', typeInfo.asMap(), typeInfoColConfig.asMap());
 
 		//self.setColConfig(self.colConfig == null
 		//	? typeInfoColConfig
 		//	: OrdMap.fromMerge([self.colConfig, typeInfoColConfig]), opts);
 		self.setColConfig(typeInfoColConfig, opts);
-	};
-
-	// #toString {{{2
-
-	Grid.prototype.toString = function () {
-		var self = this;
-
-		return '#<Grid ' + self.id + '>';
-	};
-
-	// Graph {{{1
-
-	// JSDoc Types {{{2
-
-	/**
-	 * @typedef {object} Graph~Config
-	 *
-	 * @property {Graph~Config_When} whenPlain
-	 * Tells how to configure the graph when the data is plain (has not been grouped or pivotted).
-	 *
-	 * @property {Graph~Config_When} whenGroup
-	 * Tells how to configure the graph when the data is grouped.
-	 *
-	 * @property {Graph~Config_When} whenPivot
-	 * Tells how to configure the graph when the data is pivotted.
-	 */
-
-	/**
-	 * @typedef {object} Graph~Config_When
-	 * Can either be a function that returns an object, or just an object.  If it's a function, it
-	 * receives the group fields and pivot fields as arguments.
-	 *
-	 * @mixes View~AggregateSpec
-	 */
-
-	// Constructor {{{2
-
-	/**
-	 * Creates a new graph.
-	 *
-	 * @param {string} id
-	 *
-	 * @param {View} view
-	 *
-	 * @param {Graph~Config} opts
-	 *
-	 * @class
-	 *
-	 * Represents a graph.
-	 *
-	 * @property {string} id
-	 * @property {View} view
-	 * @property {object} devConfig
-	 * @property {object} userConfig
-	 * @property {object} opts
-	 * @property {GraphRenderer} renderer
-	 */
-
-	var Graph = function (id, view, devConfig, opts) {
-		var self = this;
-
-		self.id = id;
-		self.view = view;
-		self.devConfig = devConfig || {};
-		self.userConfig = {
-			plain: {},
-			group: {},
-			pivot: {}
-		};
-		self.opts = deepDefaults(opts, {
-			title: 'Graph',
-			runImmediately: true,
-			showToolbar: true,
-			showOnDataChange: false,
-		});
-
-		if (typeof id !== 'string') {
-			throw new Error('Call Error: `id` must be a string');
-		}
-
-		if (!(view instanceof View)) {
-			throw new Error('Call Error: `view` must be an instance of MIE.WC_DataVis.View');
-		}
-
-		if (self.opts.prefs != null && !(self.opts.prefs instanceof Prefs)) {
-			throw new Error('Call Error: `opts.prefs` must be an instance of MIE.WC_DataVis.Prefs');
-		}
-
-		if (self.opts.prefs != null) {
-			self.prefs = self.opts.prefs;
-		}
-		else if (self.view.prefs != null) {
-			self.prefs = self.view.prefs;
-		}
-		else {
-			self.prefs = new Prefs(self.id);
-		}
-
-		self.prefs.bind('graph', self);
-
-		self._makeUserInterface();
-
-		self.view.addClient(self, 'graph');
-
-		self.prefs.prime(function () {
-			self.view.prime(function () {
-				self.view.on('dataUpdated', function () {
-					if (self.opts.showOnDataChange && !self.isVisible()) {
-						self.view.off('dataUpdated', self.renderer);
-						self.show();
-					}
-				});
-
-				self.view.on('fetchDataBegin', function () {
-					self._setSpinner('loading');
-					self._showSpinner();
-				});
-				self.view.on('fetchDataEnd', function () {
-					self._hideSpinner();
-				});
-
-				self.view.on('workBegin', function () {
-					self._setSpinner('working');
-					self._showSpinner();
-				});
-				self.view.on('workEnd', function (info, ops) {
-					self._hideSpinner();
-				});
-
-				self.view.on('workEnd', function (info, ops) {
-					var config;
-
-					if (ops.pivot) {
-						config = getProp(self.userConfig, 'pivot', 'graphs', getProp(self.userConfig, 'pivot', 'current'))
-							|| self.devConfig.whenPivot;
-					}
-					else if (ops.group) {
-						config = getProp(self.userConfig, 'group', 'graphs', getProp(self.userConfig, 'group', 'current'))
-							|| self.devConfig.whenGroup;
-					}
-					else {
-						config = getProp(self.userConfig, 'plain', 'graphs', getProp(self.userConfig, 'plain', 'current'))
-							|| self.devConfig.whenPlain;
-					}
-
-					if (config != null) {
-						debug.info('GRAPH // HANDLER (View.workEnd)',
-							'Matching configuration: %O', config);
-
-						var graphType = config.graphType;
-						var axis = graphType === 'bar' ? 'hAxis' : 'vAxis';
-						self.ui.graphTypeDropdown.val(config.graphType);
-					}
-
-					if (ops.group) {
-						self.ui.toolbar_aggregates.show();
-						if (config != null) {
-							self.ui.aggDropdown.val(config.aggNum);
-							self.ui.zeroAxisCheckbox.prop('checked', getProp(config, 'options', axis, 'minValue') == 0);
-						}
-					}
-					else {
-						self.ui.toolbar_aggregates.hide();
-					}
-
-					if (ops.pivot) {
-						self.ui.toolbar_pivot.show();
-						if (config != null) {
-							self.ui.stackCheckbox.prop('checked', !!getProp(config, 'options', 'isStacked'));
-						}
-					}
-					else {
-						self.ui.toolbar_pivot.hide();
-					}
-				});
-
-				self.checkGraphConfig();
-				self.renderer = new GraphRendererGoogle(self, self.ui.graph, self.view, self.opts);
-
-				if (self.opts.runImmediately) {
-					self.show();
-				}
-				else {
-					self.hide();
-				}
-			});
-		});
-	};
-
-	Graph.prototype = Object.create(Object.prototype);
-	Graph.prototype.constructor = Graph;
-
-	// #_makeUserInterface {{{2
-
-	Graph.prototype._makeUserInterface = function () {
-		var self = this;
-
-		// div.wcdv_graph (ui.root)
-		// |
-		// +-- div.wcdv_grid_titlebar (ui.titlebar)
-		// |   |
-		// |   +-- strong (ui.spinner)
-		// |   +-- strong [[ the title ]]
-		// |   `-- button [[ show/hide button ]]
-		// |
-		// `-- div.wcdv_grid_content (ui.content)
-		//     |
-		//     +-- div.wcdv_grid_toolbar (ui.toolbar)
-		//     +-- div.wcdv_toolbar_section (ui.toolbar_source)
-		//     +-- div.wcdv_toolbar_section (ui.toolbar_common)
-		//     +-- div.wcdv_toolbar_section (ui.toolbar_aggregate)
-		//     `-- div.wcdv_graph_render (ui.graph)
-
-		self.ui = {};
-		self.ui.root = jQuery(document.getElementById(self.id));
-
-		self.ui.root.addClass('wcdv_graph');
-		self.ui.root.children().remove();
-
-		self.ui.titlebar = jQuery('<div>')
-			.addClass('wcdv_grid_titlebar')
-			.on('click', function (evt) {
-				evt.stopPropagation();
-				self.toggle();
-			})
-			.appendTo(self.ui.root);
-
-		self._addTitleWidgets(self.ui.titlebar);
-
-		self.ui.content = jQuery('<div>', {
-			'class': 'wcdv_grid_content'
-		}).appendTo(self.ui.root);
-
-		self.ui.toolbar = jQuery('<div>')
-			.addClass('wcdv_grid_toolbar')
-			.appendTo(self.ui.content)
-		;
-
-		if (!self.opts.showToolbar) {
-			self.ui.toolbar.hide();
-		}
-
-		// The "pivot" toolbar section lets the user decide if colvals should show up stacked or as
-		// separate bars (for bar & column charts).
-
-		self.ui.toolbar_pivot = jQuery('<div>')
-			.addClass('wcdv_toolbar_section')
-			.hide()
-			.appendTo(self.ui.toolbar);
-		self._addPivotButtons(self.ui.toolbar_pivot);
-
-		// The "aggregates" toolbar section lets the user control what is drawn based on the aggregate
-		// functions calculated by the view.
-
-		self.ui.toolbar_aggregates = jQuery('<div>')
-			.addClass('wcdv_toolbar_section pull-right')
-			.hide()
-			.appendTo(self.ui.toolbar);
-		self._addAggregateButtons(self.ui.toolbar_aggregates);
-
-		self.ui.graph = jQuery('<div>', { 'id': self.id, 'class': 'wcdv_graph_render' });
-
-		self.ui.root
-			.append(self.ui.titlebar)
-			.append(self.ui.content
-				.append(self.ui.toolbar)
-				.append(self.ui.graph))
-		;
-	};
-
-	// #_addTitleWidgets {{{2
-
-	/**
-	 * Add widgets to the header of the graph.
-	 *
-	 * @private
-	 *
-	 * @param {jQuery} titlebar
-	 */
-
-	Graph.prototype._addTitleWidgets = function (titlebar) {
-		var self = this;
-
-		self.ui.spinner = jQuery('<span>', {
-			'style': 'font-size: 18px',
-			'class': 'wcdv_icon_button wcdv_spinner'
-		})
-			.appendTo(titlebar)
-		;
-
-		self._setSpinner(self.opts.runImmediately ? 'loading' : 'not-loaded');
-
-		jQuery('<strong>')
-			.text(self.opts.title)
-			.appendTo(titlebar);
-
-		// The "notHeader" is the extension point for adding information into the titlebar.  It's really
-		// just a place where clicking doesn't trigger the expand/collapse behavior that the rest of the
-		// titlebar has.  Anything that you'd want to shown in the title, which could be interactive,
-		// should be added under here.
-
-		var notHeader = jQuery('<span>', {'class': 'headingInfo'})
-			.on('click', function (evt) {
-				evt.stopPropagation();
-			})
-			.appendTo(titlebar);
-
-		// Create container to hold all the controls in the titlebar
-
-		self.ui.titlebar_controls = jQuery('<div>')
-			.addClass('wcdv_titlebar_controls pull-right')
-			.appendTo(titlebar);
-
-		// Create the Export button
-
-		self.ui.exportBtn = jQuery('<button>', {
-			'type': 'button',
-			'style': 'font-size: 18px',
-			'class': 'wcdv_icon_button wcdv_text-primary'
-		})
-			.on('click', function (evt) {
-				evt.stopPropagation();
-				self.export();
-			})
-			.append(fontAwesome('f019'))
-			.appendTo(self.ui.titlebar_controls)
-		;
-
-		// Create the Refresh button
-
-		self.ui.refreshBtn = jQuery('<button>', {
-			'type': 'button',
-			'style': 'font-size: 18px',
-			'class': 'wcdv_icon_button wcdv_text-primary'
-		})
-			.attr('title', 'Refresh')
-			.on('click', function (evt) {
-				evt.stopPropagation();
-				self.refresh();
-			})
-			.append(fontAwesome('f021'))
-			.appendTo(self.ui.titlebar_controls)
-		;
-
-		// This is the "gear" icon that shows/hides the controls below the toolbar.  The controls are used
-		// to set the group, pivot, aggregate, and filters.  Ideally the user only has to utilize these
-		// once, and then switches between perspectives to get the same effect.
-
-		jQuery('<button>', {
-			'type': 'button',
-			'style': 'font-size: 18px',
-			'class': 'wcdv_icon_button wcdv_text-primary'
-		})
-			.attr('title', MIE.trans('SHOWHIDEOPTS'))
-			.click(function (evt) {
-				evt.stopPropagation();
-				self.toggleControls();
-			})
-			.append(jQuery(fontAwesome('fa-cog')))
-			.appendTo(self.ui.titlebar_controls)
-		;
-
-		// Create the down-chevron button that shows/hides everything under the titlebar.
-
-		self.ui.showHideButton = jQuery('<button>', {
-			'type': 'button',
-			'style': 'font-size: 18px',
-			'class': 'wcdv_icon_button wcdv_text-primary showhide'
-		})
-			.attr('title', MIE.trans('SHOWHIDE'))
-			.click(function (evt) {
-				evt.stopPropagation();
-				self.toggle();
-			})
-			.append(jQuery(fontAwesome('f078')))
-			.appendTo(self.ui.titlebar_controls)
-		;
-	};
-
-	// #_addAggregateButtons {{{2
-
-	Graph.prototype._addAggregateButtons = function (toolbar) {
-		var self = this;
-
-		var graphTypeDropdownId = gensym();
-		jQuery('<label>', { 'for': graphTypeDropdownId }).text('Graph Type: ').appendTo(toolbar);
-		self.ui.graphTypeDropdown = jQuery('<select>', { 'id': graphTypeDropdownId })
-			.on('change', function () {
-				self.drawInteractive();
-			})
-			.appendTo(toolbar);
-
-		GRAPH_TYPES.each(function (gt) {
-			self.ui.graphTypeDropdown.append(jQuery('<option>', { 'value': gt.value }).text(gt.name));
-		});
-
-		var aggDropdownId = gensym();
-		jQuery('<label>', { 'for': aggDropdownId }).text('Aggregate: ').appendTo(toolbar);
-		self.ui.aggDropdown = jQuery('<select>', { 'id': aggDropdownId })
-			.on('change', function () {
-				self.drawInteractive();
-			})
-			.appendTo(toolbar);
-
-		self.ui.zeroAxisCheckbox = makeToggleCheckbox(
-			null,
-			null,
-			false,
-			'Y-Axis Starts at Zero',
-			toolbar,
-			function (isChecked) {
-				self.drawInteractive();
-			}
-		);
-
-		self.view.on('workEnd', function () {
-			self._updateAggDropdown();
-		});
-	};
-
-	// #_addPivotButtons {{{2
-
-	Graph.prototype._addPivotButtons = function (toolbar) {
-		var self = this;
-
-		self.ui.stackCheckbox = makeToggleCheckbox(
-			null,
-			null,
-			true,
-			'Stack',
-			toolbar,
-			function (isChecked) {
-				self.drawInteractive();
-			}
-		);
-	};
-
-	// #_udpateAggDropdown {{{2
-
-	Graph.prototype._updateAggDropdown = function () {
-		var self = this;
-
-		var addOption = function (aggInfo) {
-			var name = aggInfo.name || aggInfo.instance.getFullName();
-			var num = aggInfo.aggNum;
-			var option = jQuery('<option>', { 'value': num }).text(name);
-
-			self.ui.aggDropdown.append(option);
-		};
-
-		self.view.getData(function (ok, data) {
-			self.ui.aggDropdown.children().remove();
-
-			if (data.isGroup) {
-				underscore.each(getPropDef([], data, 'agg', 'info', 'group'), addOption);
-			}
-			else if (data.isPivot) {
-				underscore.each(getPropDef([], data, 'agg', 'info', 'pivot'), addOption);
-			}
-		});
-	};
-
-	// #export {{{2
-
-	Graph.prototype.export = function () {
-		var self = this;
-
-		if (self.exportBlob == null) {
-			return;
-		}
-
-		var fileName = (self.opts.title || self.id) + '.png';
-		presentDownload(self.exportBlob, fileName);
-	};
-
-	// #_setExportBlob {{{2
-
-	Graph.prototype._setExportBlob = function (blob) {
-		var self = this;
-
-		self.exportBlob = blob;
-		self.ui.exportBtn.prop('disabled', blob == null);
-	};
-
-	// #_clearExportBlob {{{2
-
-	Graph.prototype._clearExportBlob = function () {
-		var self = this;
-
-		self.exportBlob = null;
-		self.ui.exportBtn.prop('disabled', true);
-	};
-
-	// #drawFromConfig {{{2
-
-	Graph.prototype.drawFromConfig = function () {
-		var self = this;
-
-		self.renderer.draw(self.devConfig, self.userConfig);
-	};
-
-	// #drawInteractive {{{2
-
-	Graph.prototype.drawInteractive = function () {
-		var self = this;
-
-		var graphType = self.ui.graphTypeDropdown.val();
-		var minValue = self.ui.zeroAxisCheckbox.prop('checked') ? 0 : null;
-
-		var config = {
-			group: {
-				graphs: {},
-				current: graphType
-			},
-			pivot: {
-				graphs: {},
-				current: graphType
-			}
-		};
-
-		// NOTE The `graphType` field here is useless except that it makes the rendering function (e.g.
-		// GraphRendererGoogle#draw_plain) more convenient to implement.
-
-		config.group.graphs[graphType] = {
-			graphType: graphType,
-			aggNum: toInt(self.ui.aggDropdown.val()),
-			options: {}
-		};
-
-		// At least with Google Charts, you have to swap the horizontal and vertical axis configuration
-		// for bar charts (since they're on their side).
-
-		switch (graphType) {
-		case 'bar':
-			config.group.graphs[graphType].options = {
-				vAxis: {
-					minValue: minValue
-				}
-			};
-			break;
-		default:
-			config.group.graphs[graphType].options = {
-				vAxis: {
-					minValue: minValue
-				}
-			};
-		}
-
-		// Copy everything... not strictly necessary AFAIK, but it's safe.
-		config.pivot = deepCopy(config.group);
-
-		// Make sure to add the stack setting for pivot mode.
-		config.pivot.graphs[graphType].options.isStacked = self.ui.stackCheckbox.prop('checked');
-
-		// Store this configuration in the userConfig so that it can be saved with prefs.
-		underscore.extend(self.userConfig, config);
-
-		if (self.prefs != null) {
-			self.prefs.save();
-		}
-
-		debug.info('GRAPH', 'Drawing graph based on interactive config [userConfig = %O]', self.userConfig);
-
-		self.renderer.draw(self.devConfig, self.userConfig);
-	};
-
-	// #checkGraphConfig {{{2
-
-	Graph.prototype.checkGraphConfig = function () {
-		if (self.devConfig == null) {
-			return;
-		}
-
-		underscore.each(['whenPlain', 'whenGroup', 'whenPivot'], function (dataFormat) {
-			if (self.devConfig[dataFormat] === undefined) {
-				return;
-			}
-
-			var config = self.devConfig[dataFormat];
-
-			// Check the "graphType" property.
-
-			if (config.graphType != null) {
-				if (!underscore.isString(config.graphType)) {
-					throw new Error('Graph config error: data format "' + dataFormat + '": `graphType` must be a string');
-				}
-
-				if (['area', 'bar', 'column', 'pie'].indexOf(config.graphType) === -1) {
-					throw new Error('Graph config error: data format "' + dataFormat + '": invalid `graphType`: ' + config.graphType);
-				}
-			}
-
-			switch (config.graphType) {
-			case 'area':
-			case 'bar':
-			case 'column':
-			case 'pie':
-				if (config.valueField != null && config.valueFields != null) {
-					throw new Error('Graph config error: data format "' + dataFormat + '": can\'t define both `valueField` and `valueFields`');
-				}
-
-				// Turn the singular "valueField" into the plural "valueFields."
-
-				if (config.valueField != null) {
-					if (!underscore.isString(config.valueField)) {
-						throw new Error('Graph config error: data format "' + dataFormat + '": `valueField` must be a string');
-					}
-					config.valueFields = [config.valueField];
-					delete config.valueField;
-				}
-
-				// Check the "valueFields" property, if it exists.
-
-				if (config.valueFields != null) {
-					if (!underscore.isArray(config.valueFields)) {
-						throw new Error('Graph config error: data format "' + dataFormat + '": `valueFields` must be an array');
-					}
-
-					underscore.each(config.valueFields, function (f, i) {
-						if (!underscore.isString(f)) {
-							throw new Error('Graph config error: data format "' + dataFormat + '": `valueFields[' + i + ']` must be a string');
-						}
-					});
-				}
-			}
-		});
-	};
-
-	// #refresh {{{2
-
-	/**
-	 * Refreshes the data from the data view in the grid.
-	 *
-	 * @method
-	 * @memberof Grid
-	 */
-
-	Graph.prototype.refresh = function () {
-		var self = this;
-
-		self.view.clearSourceData();
-	};
-
-	// #hide {{{2
-
-	/**
-	 * Hide the grid.
-	 *
-	 * @method
-	 * @memberof Grid
-	 */
-
-	Graph.prototype.hide = function () {
-		var self = this;
-
-		debug.info('GRAPH', 'Hiding...');
-
-		self.ui.content.hide({
-			duration: 0,
-			done: function () {
-				if (self.opts.title) {
-					self.ui.showHideButton.removeClass('open fa-rotate-180');
-				}
-			}
-		});
-	};
-
-	// #show {{{2
-
-	/**
-	 * Make the grid visible.  If the grid has not been "run" yet, it will be done now.
-	 *
-	 * @param {object} [opts]
-	 *
-	 * @param {boolean} [opts.redraw=true]
-	 * If true, automatically redraw the grid after it has been shown.  This is almost always what you
-	 * want, unless you intend to manually call `redraw()` or `refresh()` immediately after showing it.
-	 */
-
-	Graph.prototype.show = function (opts) {
-		var self = this;
-
-		opts = deepDefaults(opts, {
-			redraw: true
-		});
-
-		debug.info('GRAPH', 'Showing...');
-
-		self.ui.content.show({
-			duration: 0,
-			done: function () {
-				if (self.opts.title) {
-					self.ui.showHideButton.addClass('open fa-rotate-180');
-				}
-				if (opts.redraw) {
-					self.drawFromConfig();
-				}
-			}
-		});
-	};
-
-	// #toggle {{{2
-
-	/**
-	 * Toggle graph visibility.
-	 */
-
-	Graph.prototype.toggle = function () {
-		var self = this;
-
-		if (self.ui.content.css('display') === 'none') {
-			self.show();
-		}
-		else {
-			self.hide();
-		}
-	};
-
-	// #isVisible {{{2
-
-	/**
-	 * Determine if the graph is currently visible.
-	 *
-	 * @returns {boolean}
-	 * True if the graph is currently visible, false if it is not.
-	 */
-
-	Graph.prototype.isVisible = function () {
-		var self = this;
-
-		return self.ui.content.css('display') !== 'none';
-	};
-
-	// #_setSpinner {{{2
-
-	/**
-	 * Set the type of the spinner icon.
-	 *
-	 * @param {string} what
-	 * The kind of spinner icon to show.  Must be one of: loading, not-loaded, working.
-	 */
-
-	Graph.prototype._setSpinner = function (what) {
-		var self = this;
-
-		switch (what) {
-		case 'loading':
-			self.ui.spinner.html(fontAwesome('F021', 'fa-spin', 'Loading...'));
-			break;
-		case 'not-loaded':
-			self.ui.spinner.html(fontAwesome('F05E', null, 'Not Loaded'));
-			break;
-		case 'working':
-			self.ui.spinner.html(fontAwesome('F1CE', 'fa-spin', 'Working...'));
-			break;
-		}
-	};
-
-	// #_showSpinner {{{2
-
-	/**
-	 * Show the spinner icon.
-	 */
-
-	Graph.prototype._showSpinner = function () {
-		var self = this;
-
-		self.ui.spinner.show();
-	};
-
-	// #_hideSpinner {{{2
-
-	/**
-	 * Hide the spinner icon.
-	 */
-
-	Graph.prototype._hideSpinner = function () {
-		var self = this;
-
-		self.ui.spinner.hide();
-	};
-
-	// #setUserConfig {{{2
-
-	Graph.prototype.setUserConfig = function (config) {
-		var self = this;
-
-		self.userConfig = config;
-
-		// When the constructor binds to prefs, this method can be called before the renderer is created.
-		// That's not a big deal, just don't do anything here if that's the case.
-
-		if (self.renderer != null) {
-			self.renderer.draw(self.devConfig, self.userConfig);
-		}
 	};
 
 	// GraphRenderer {{{1
@@ -38083,7 +40654,7 @@
 
 	// #_validateConfig {{{2
 
-	GraphRenderer.prototype._validateConfig = function (config) {
+	GraphRenderer.prototype._validateConfig = function () {
 
 		underscore.each(['Plain', 'Group', 'Pivot'], function (kind) {
 			var propName = 'when' + kind;
@@ -38109,8 +40680,8 @@
 
 		debug.info('GRAPH // RENDER (GOOGLE)', 'Adding redraw handlers');
 
-		self.view.off('dataUpdated', self);
-		self.view.on('dataUpdated', function () {
+		self.view.off('workEnd', self);
+		self.view.on('workEnd', function () {
 			debug.info('GRAPH RENDERER // HANDLER (View.dataUpdated)',
 				'Redrawing graph because the view has finished doing work');
 			f();
@@ -38269,23 +40840,34 @@
 		// dt.addColumn(typeInfo.get(config.categoryField).type, config.categoryField);
 		dt.addColumn('string', config.categoryField);
 
-		if (config.aggNum != null) {
-			var aggInfo = data.agg.info.group[config.aggNum];
+		if (config.aggType != null && config.aggNum != null) {
+			var aggInfo = getProp(data, 'agg', 'info', config.aggType, config.aggNum);
+			if (aggInfo == null) {
+				log.error('The specified aggregate does not exist: ' + config.aggType + '[' + config.aggNum + ']');
+				return null;
+			}
+			if (data.agg.results[config.aggType][config.aggNum] == null) {
+				log.error('No results exist for the specified aggregate: ' + config.aggType + '[' + config.aggNum + ']');
+				return null;
+			}
 			var name = aggInfo.name || aggInfo.instance.getFullName();
-			var aggType = aggInfo.instance.getType();
+			var aggResultType = aggInfo.instance.getType();
 
-			if (aggType === 'currency') {
-				aggType = 'number';
+			if (aggResultType === 'currency') {
+				aggResultType = 'number';
 				setProp('currency', config, 'options', valueAxis, 'format');
 			}
 
-			dt.addColumn(aggType, name);
+			dt.addColumn(aggResultType, name);
 			setProp(name, config, 'options', valueAxis, 'title');
 
 			underscore.each(data.rowVals, function (rowVal, rowValIdx) {
 				var newRow = [rowVal.join(', ')];
 
-				var aggResult = data.agg.results.group[config.aggNum][rowValIdx];
+				var aggResult = data.agg.results[config.aggType][config.aggNum][rowValIdx];
+				if (aggResultType === 'number') {
+					aggResult = +aggResult;
+				}
 				newRow.push(aggResult);
 				dt.addRow(newRow);
 			});
@@ -38350,32 +40932,77 @@
 
 		dt.addColumn('string', config.categoryField);
 
-		if (config.aggNum != null) {
-			var aggInfo = data.agg.info.cell[config.aggNum];
+		if (config.aggType != null && config.aggNum != null) {
+			var aggInfo = getProp(data, 'agg', 'info', config.aggType, config.aggNum);
+			if (aggInfo == null) {
+				log.error('The specified aggregate does not exist: ' + config.aggType + '[' + config.aggNum + ']');
+				return null;
+			}
+			if (data.agg.results[config.aggType][config.aggNum] == null) {
+				log.error('No results exist for the specified aggregate: ' + config.aggType + '[' + config.aggNum + ']');
+				return null;
+			}
 			var name = aggInfo.name || aggInfo.instance.getFullName();
-			var aggType = aggInfo.instance.getType();
+			var aggResultType = aggInfo.instance.getType();
 
-			if (aggType === 'currency') {
-				aggType = 'number';
+			if (aggResultType === 'currency') {
+				aggResultType = 'number';
 				setProp('currency', config, 'options', valueAxis, 'format');
 			}
 
-			underscore.each(data.colVals, function (colVal) {
-				dt.addColumn(aggType, colVal.join(', '));
-			});
-
-			setProp(name, config, 'options', valueAxis, 'title');
-
-			underscore.each(data.rowVals, function (rowVal, rowValIdx) {
-				var newRow = [rowVal.join(', ')];
-
-				underscore.each(data.colVals, function (colVal, colValIdx) {
-					var aggResult = data.agg.results.cell[config.aggNum][rowValIdx][colValIdx];
-					newRow.push(aggResult);
+			switch (config.aggType) {
+			case 'cell':
+				underscore.each(data.colVals, function (colVal) {
+					dt.addColumn(aggResultType, colVal.join(', '));
 				});
 
-				dt.addRow(newRow);
-			});
+				setProp(name, config, 'options', valueAxis, 'title');
+
+				underscore.each(data.rowVals, function (rowVal, rowValIdx) {
+					var newRow = [rowVal.join(', ')];
+
+					underscore.each(data.colVals, function (colVal, colValIdx) {
+						var aggResult = data.agg.results[config.aggType][config.aggNum][rowValIdx][colValIdx];
+						if (aggResultType === 'number') {
+							aggResult = +aggResult;
+						}
+						newRow.push(aggResult);
+					});
+
+					dt.addRow(newRow);
+				});
+				break;
+			case 'group':
+				dt.addColumn(aggResultType, name);
+				setProp(name, config, 'options', valueAxis, 'title');
+
+				underscore.each(data.rowVals, function (rowVal, rowValIdx) {
+					var newRow = [rowVal.join(', ')];
+
+					var aggResult = data.agg.results[config.aggType][config.aggNum][rowValIdx];
+					if (aggResultType === 'number') {
+						aggResult = +aggResult;
+					}
+					newRow.push(aggResult);
+					dt.addRow(newRow);
+				});
+				break;
+			case 'pivot':
+				dt.addColumn(aggResultType, name);
+				setProp(name, config, 'options', valueAxis, 'title');
+
+				underscore.each(data.colVals, function (colVal, colValIdx) {
+					var newRow = [colVal.join(', ')];
+
+					var aggResult = data.agg.results[config.aggType][config.aggNum][colValIdx];
+					if (aggResultType === 'number') {
+						aggResult = +aggResult;
+					}
+					newRow.push(aggResult);
+					dt.addRow(newRow);
+				});
+				break;
+			}
 		}
 		else {
 			var ai = [];
@@ -38427,8 +41054,8 @@
 			};
 			if (!wasAlreadyLoaded) {
 				debug.info('GRAPH // GOOGLE // DRAW', 'Loading support for Google Charts');
-				google.charts.load('current', {'packages': ['corechart', 'gantt']});
-				google.charts.setOnLoadCallback(cb);
+				window.google.charts.load('current', {'packages': ['corechart', 'gantt']});
+				window.google.charts.setOnLoadCallback(cb);
 			}
 			else {
 				cb();
@@ -38453,12 +41080,12 @@
 
 					var makeMessage = function (msg) {
 						jQuery('<div>')
-							.css({
-								'height': self.opts.height + 'px'
-							})
+							.addClass('wcdv_graph_message_container')
+							.css({ 'height': self.opts.height + 'px' })
 							.append(
-								jQuery('<div>', { 'class': 'wcdv_graph_message' })
-								.text(msg)
+								jQuery('<div>')
+									.addClass('wcdv_graph_message')
+									.text(msg)
 							)
 							.appendTo(self.elt);
 					};
@@ -38502,15 +41129,18 @@
 						width: self.opts.width,
 						height: self.opts.height,
 						isStacked: config.stacked,
-						chartArea: {
+					};
+
+					var categoryAxis = config.graphType === 'bar' ? 'vAxis' : 'hAxis';
+
+					if (config.graphType === 'pie') {
+						options.chartArea = {
 							top: '5%',
 							left: '5%',
 							width: '90%',
 							height: '90%'
-						}
-					};
-
-					var categoryAxis = config.graphType === 'bar' ? 'vAxis' : 'hAxis';
+						};
+					}
 
 					setProp(config.categoryField, options, categoryAxis, 'title');
 
@@ -38526,11 +41156,46 @@
 						self.graph._setExportBlob(blob);
 					});
 
+					google.visualization.events.addListener(chart, 'select', function () {
+						var sel = chart.getSelection();
+						underscore.each(sel, function (o) {
+							debug.info('GRAPH // DRILL DOWN', 'User selected element in graph: row = %s, column = %s, value = %s, formattedValue = %s', o.row, o.column, dt.getValue(o.row, o.column), dt.getFormattedValue(o.row, o.column));
+
+							var filter = deepCopy(self.view.getFilter());
+
+							underscore.each(data.rowVals[o.row], function (x, i) {
+								var gs = data.groupSpec[i];
+								filter[data.groupFields[i]] = gs.fun != null
+									? GROUP_FUNCTION_REGISTRY.get(gs.fun).valueToFilter(x)
+									: { '$eq': x };
+							});
+
+							if (data.isPivot) {
+								// Offset column by one because the category is stored in the first column of the Google
+								// DataTable, but that obviously doesn't exist in the View.
+
+								underscore.each(data.colVals[o.column - 1], function (x, i) {
+									var ps = data.pivotSpec[i];
+									filter[data.pivotFields[i]] = ps.fun != null
+										? GROUP_FUNCTION_REGISTRY.get(ps.fun).valueToFilter(x)
+										: { '$eq': x };
+								});
+							}
+
+							debug.info('GRAPH // DRILL DOWN',
+								'Creating new perspective: filter = %O', filter);
+
+							window.setTimeout(function () {
+								self.view.prefs.addPerspective(null, 'Drill Down', { view: { filter: filter } }, { isTemporary: true }, null, { onDuplicate: 'replace' });
+							});
+						});
+					});
+
 					debug.info('GRAPH // GOOGLE // DRAW', 'Starting draw: [config = %O ; options = %O]', config, options);
 
 					chart.draw(dt, options);
 				});
-			});
+			}, 'Drawing Google graph');
 		});
 	};
 
@@ -38546,7 +41211,7 @@
 		elt.children().remove();
 
 		self.view.getData(function (ok, data) {
-			self.view.getTypeInfo(function (ok, typeInfo) {
+			self.view.getTypeInfo(function () {
 				var ctor = {
 					area: 'AreaChart',
 					bar: 'BarChart'
@@ -38579,19 +41244,873 @@
 				var chart = new $jit[ctor[self.opts.type]](options);
 				chart.loadJSON(json);
 			});
+		}, 'Drawing JIT graph');
+	};
+
+	// Graph {{{1
+
+	// JSDoc Types {{{2
+
+	/**
+	 * @typedef {object} Graph~Config
+	 *
+	 * @property {Graph~Config_When} whenPlain
+	 * Tells how to configure the graph when the data is plain (has not been grouped or pivotted).
+	 *
+	 * @property {Graph~Config_When} whenGroup
+	 * Tells how to configure the graph when the data is grouped.
+	 *
+	 * @property {Graph~Config_When} whenPivot
+	 * Tells how to configure the graph when the data is pivotted.
+	 */
+
+	/**
+	 * @typedef {object} Graph~Config_When
+	 * Can either be a function that returns an object, or just an object.  If it's a function, it
+	 * receives the group fields and pivot fields as arguments.
+	 *
+	 * @mixes View~AggregateSpec
+	 */
+
+	// Constructor {{{2
+
+	/**
+	 * Creates a new graph.
+	 *
+	 * @param {string} id
+	 *
+	 * @param {View} view
+	 *
+	 * @param {Graph~Config} opts
+	 *
+	 * @class
+	 *
+	 * Represents a graph.
+	 *
+	 * @property {string} id
+	 * @property {View} view
+	 * @property {object} devConfig
+	 * @property {object} userConfig
+	 * @property {object} opts
+	 * @property {GraphRenderer} renderer
+	 */
+
+	var Graph = makeSubclass('Graph', Object, function (id, view, devConfig, opts) {
+		var self = this;
+
+		self.id = id;
+		self.view = view;
+		self.devConfig = devConfig || {};
+		self.userConfig = {
+			plain: {},
+			group: {},
+			pivot: {}
+		};
+		self.opts = deepDefaults(opts, {
+			title: 'Graph',
+			runImmediately: true,
+			showToolbar: true,
+			showOnDataChange: false,
 		});
+		self.hasRun = false;
+
+		if (typeof id !== 'string') {
+			throw new Error('Call Error: `id` must be a string');
+		}
+
+		if (!(view instanceof View)) {
+			throw new Error('Call Error: `view` must be an instance of MIE.WC_DataVis.View');
+		}
+
+		if (self.opts.prefs != null && !(self.opts.prefs instanceof Prefs)) {
+			throw new Error('Call Error: `opts.prefs` must be an instance of MIE.WC_DataVis.Prefs');
+		}
+
+		if (self.opts.prefs != null) {
+			self.prefs = self.opts.prefs;
+		}
+		else if (self.view.prefs != null) {
+			self.prefs = self.view.prefs;
+		}
+		else {
+			self.prefs = new Prefs(self.id);
+		}
+
+		self.prefs.bind('graph', self);
+
+		self._makeUserInterface();
+
+		self.view.addClient(self, 'graph');
+
+		// Event handlers for keeping the spinner icon updated.
+
+		self.view.on('fetchDataBegin', function () {
+			self._setSpinner('loading');
+			self._showSpinner();
+		});
+		self.view.on('fetchDataEnd', function () {
+			self._hideSpinner();
+		});
+
+		self.view.on('workBegin', function () {
+			self._setSpinner('working');
+			self._showSpinner();
+		});
+		self.view.on('workEnd', function () {
+			self._hideSpinner();
+		});
+
+		// Event handler for keeping the UI in sync with the data.
+
+		self.view.on('workEnd', function (info, ops) {
+			var config;
+
+			if (ops.pivot) {
+				config = getProp(self.userConfig, 'pivot', 'graphs', getProp(self.userConfig, 'pivot', 'current'))
+					|| self.devConfig.whenPivot;
+			}
+			else if (ops.group) {
+				config = getProp(self.userConfig, 'group', 'graphs', getProp(self.userConfig, 'group', 'current'))
+					|| self.devConfig.whenGroup;
+			}
+			else {
+				config = getProp(self.userConfig, 'plain', 'graphs', getProp(self.userConfig, 'plain', 'current'))
+					|| self.devConfig.whenPlain;
+			}
+
+			if (config != null) {
+				debug.info('GRAPH // HANDLER (View.workEnd)',
+					'Matching configuration: %O', config);
+
+				var graphType = config.graphType;
+				var axis = graphType === 'bar' ? 'hAxis' : 'vAxis';
+				self.ui.graphTypeDropdown.val(config.graphType);
+			}
+
+			if (ops.group) {
+				self.ui.toolbar_aggregates.show();
+				if (config != null) {
+					self.ui.aggDropdown.val(config.aggNum);
+					self.ui.zeroAxisCheckbox.prop('checked', getProp(config, 'options', axis, 'minValue') == 0);
+				}
+			}
+			else {
+				self.ui.toolbar_aggregates.hide();
+			}
+
+			if (ops.pivot) {
+				self.ui.toolbar_pivot.show();
+				if (config != null) {
+					self.ui.stackCheckbox.prop('checked', !!getProp(config, 'options', 'isStacked'));
+				}
+			}
+			else {
+				self.ui.toolbar_pivot.hide();
+			}
+		}, {
+			who: self
+		});
+
+		self.view.on('dataUpdated', function () {
+			if (self.opts.showOnDataChange && !self.isVisible()) {
+				self.show({ redraw: false });
+			}
+			self.redraw();
+			/*
+			switch (self.lastDrawnFrom) {
+			case 'config':
+				self.drawFromConfig();
+				break;
+			case 'interactive':
+			default:
+				self.drawInteractive();
+				break;
+			}
+			*/
+		});
+
+		if (self.opts.runImmediately) {
+			self.show();
+		}
+		else {
+			self.hasRun = false;
+			self.hide();
+		}
+
+	});
+
+	// #toString {{{2
+
+	Graph.prototype.toString = function () {
+		return 'Graph(id="' + this.id + '")';
+	};
+
+	// #_makeUserInterface {{{2
+
+	Graph.prototype._makeUserInterface = function () {
+		var self = this;
+
+		// div.wcdv_graph (ui.root)
+		// |
+		// +-- div.wcdv_grid_titlebar (ui.titlebar)
+		// |   |
+		// |   +-- strong (ui.spinner)
+		// |   +-- strong [[ the title ]]
+		// |   `-- button [[ show/hide button ]]
+		// |
+		// `-- div.wcdv_grid_content (ui.content)
+		//     |
+		//     +-- div.wcdv_grid_toolbar (ui.toolbar)
+		//     +-- div.wcdv_toolbar_section (ui.toolbar_source)
+		//     +-- div.wcdv_toolbar_section (ui.toolbar_common)
+		//     +-- div.wcdv_toolbar_section (ui.toolbar_aggregate)
+		//     `-- div.wcdv_graph_render (ui.graph)
+
+		self.ui = {};
+		self.ui.root = jQuery(document.getElementById(self.id));
+
+		self.ui.root.addClass('wcdv_graph');
+		self.ui.root.children().remove();
+
+		self.ui.titlebar = jQuery('<div>')
+			.addClass('wcdv_grid_titlebar')
+			.on('click', function (evt) {
+				evt.stopPropagation();
+				self.toggle();
+			})
+			.appendTo(self.ui.root);
+
+		self._addTitleWidgets(self.ui.titlebar);
+
+		self.ui.content = jQuery('<div>', {
+			'class': 'wcdv_grid_content'
+		}).appendTo(self.ui.root);
+
+		self.ui.toolbar = jQuery('<div>')
+			.addClass('wcdv_grid_toolbar')
+			.appendTo(self.ui.content)
+		;
+
+		if (!self.opts.showToolbar) {
+			self.ui.toolbar.hide();
+		}
+
+		// The "pivot" toolbar section lets the user decide if colvals should show up stacked or as
+		// separate bars (for bar & column charts).
+
+		self.ui.toolbar_pivot = jQuery('<div>')
+			.addClass('wcdv_toolbar_section')
+			.hide()
+			.appendTo(self.ui.toolbar);
+		self._addPivotButtons(self.ui.toolbar_pivot);
+
+		// The "aggregates" toolbar section lets the user control what is drawn based on the aggregate
+		// functions calculated by the view.
+
+		self.ui.toolbar_aggregates = jQuery('<div>')
+			.addClass('wcdv_toolbar_section pull-right')
+			.hide()
+			.appendTo(self.ui.toolbar);
+		self._addAggregateButtons(self.ui.toolbar_aggregates);
+
+		self.ui.graph = jQuery('<div>', { 'id': self.id, 'class': 'wcdv_graph_render' });
+
+		self.ui.root
+			.append(self.ui.titlebar)
+			.append(self.ui.content
+				.append(self.ui.toolbar)
+				.append(self.ui.graph))
+		;
+	};
+
+	// #_addTitleWidgets {{{2
+
+	/**
+	 * Add widgets to the header of the graph.
+	 *
+	 * @private
+	 *
+	 * @param {jQuery} titlebar
+	 */
+
+	Graph.prototype._addTitleWidgets = function (titlebar) {
+		var self = this;
+
+		self.ui.spinner = jQuery('<span>', {
+			'style': 'font-size: 18px',
+			'class': 'wcdv_icon_button wcdv_spinner'
+		})
+			.appendTo(titlebar)
+		;
+
+		self._setSpinner(self.opts.runImmediately ? 'loading' : 'not-loaded');
+
+		jQuery('<strong>')
+			.text(self.opts.title)
+			.appendTo(titlebar);
+
+
+		// Create container to hold all the controls in the titlebar
+
+		self.ui.titlebar_controls = jQuery('<div>')
+			.addClass('wcdv_titlebar_controls pull-right')
+			.appendTo(titlebar);
+
+		// Create the Export button
+
+		self.ui.exportBtn = jQuery('<button>', {
+			'type': 'button',
+			'style': 'font-size: 18px',
+			'class': 'wcdv_icon_button wcdv_text-primary'
+		})
+			.on('click', function (evt) {
+				evt.stopPropagation();
+				self.export();
+			})
+			.append(fontAwesome('f019'))
+			.appendTo(self.ui.titlebar_controls)
+		;
+
+		// Create the Refresh button
+
+		self.ui.refreshBtn = jQuery('<button>', {
+			'type': 'button',
+			'style': 'font-size: 18px',
+			'class': 'wcdv_icon_button wcdv_text-primary'
+		})
+			.attr('title', 'Refresh')
+			.on('click', function (evt) {
+				evt.stopPropagation();
+				self.refresh();
+			})
+			.append(fontAwesome('f021'))
+			.appendTo(self.ui.titlebar_controls)
+		;
+
+		// This is the "gear" icon that shows/hides the controls below the toolbar.  The controls are used
+		// to set the group, pivot, aggregate, and filters.  Ideally the user only has to utilize these
+		// once, and then switches between perspectives to get the same effect.
+
+		jQuery('<button>', {
+			'type': 'button',
+			'style': 'font-size: 18px',
+			'class': 'wcdv_icon_button wcdv_text-primary'
+		})
+			.attr('title', trans('SHOWHIDEOPTS'))
+			.click(function (evt) {
+				evt.stopPropagation();
+				self.ui.toolbar.toggle();
+			})
+			.append(jQuery(fontAwesome('fa-cog')))
+			.appendTo(self.ui.titlebar_controls)
+		;
+
+		// Create the down-chevron button that shows/hides everything under the titlebar.
+
+		self.ui.showHideButton = jQuery('<button>', {
+			'type': 'button',
+			'style': 'font-size: 18px',
+			'class': 'wcdv_icon_button wcdv_text-primary showhide'
+		})
+			.attr('title', trans('SHOWHIDE'))
+			.click(function (evt) {
+				evt.stopPropagation();
+				self.toggle();
+			})
+			.append(jQuery(fontAwesome('f078')))
+			.appendTo(self.ui.titlebar_controls)
+		;
+	};
+
+	// #_addAggregateButtons {{{2
+
+	Graph.prototype._addAggregateButtons = function (toolbar) {
+		var self = this;
+
+		var graphTypeDropdownId = gensym();
+		jQuery('<label>', { 'for': graphTypeDropdownId }).text('Graph Type: ').appendTo(toolbar);
+		self.ui.graphTypeDropdown = jQuery('<select>', { 'id': graphTypeDropdownId })
+			.on('change', function () {
+				self.drawInteractive();
+			})
+			.appendTo(toolbar);
+
+		GRAPH_TYPES.each(function (gt) {
+			self.ui.graphTypeDropdown.append(jQuery('<option>', { 'value': gt.value }).text(gt.name));
+		});
+
+		var aggDropdownId = gensym();
+		jQuery('<label>', { 'for': aggDropdownId }).text('Aggregate: ').appendTo(toolbar);
+		self.ui.aggDropdown = jQuery('<select>', { 'id': aggDropdownId })
+			.on('change', function () {
+				self.drawInteractive();
+			})
+			.appendTo(toolbar);
+
+		self.ui.zeroAxisCheckbox = makeToggleCheckbox(
+			null,
+			null,
+			false,
+			'Y-Axis Starts at Zero',
+			toolbar,
+			function () {
+				self.drawInteractive();
+			}
+		);
+
+		self.view.on('workEnd', function () {
+			self._updateAggDropdown();
+		});
+	};
+
+	// #_addPivotButtons {{{2
+
+	Graph.prototype._addPivotButtons = function (toolbar) {
+		var self = this;
+
+		self.ui.stackCheckbox = makeToggleCheckbox(
+			null,
+			null,
+			true,
+			'Stack',
+			toolbar,
+			function () {
+				self.drawInteractive();
+			}
+		);
+	};
+
+	// #_udpateAggDropdown {{{2
+
+	Graph.prototype._updateAggDropdown = function () {
+		var self = this;
+
+		// options : [obj]
+		// obj : {
+		//   name : string
+		//   type : string ('group', 'pivot', 'cell')
+		//   num : int
+		// }
+
+		var options = [];
+
+		// addOption : AggregateInfo, string -> ()
+
+		var addOption = function (aggInfo, appendToName) {
+			var name = aggInfo.name || aggInfo.instance.getFullName();
+			if (appendToName != null) {
+				name += appendToName;
+			}
+			options.push({
+				name: name,
+				type: aggInfo.aggType,
+				num: aggInfo.aggNum
+			});
+		};
+
+		self.view.getData(function (ok, data) {
+			self.ui.aggDropdown.children().remove();
+
+			if (data.isGroup) {
+				underscore.each(getPropDef([], data, 'agg', 'info', 'group'), function (ai) {
+					addOption(ai);
+				});
+			}
+			else if (data.isPivot) {
+				underscore.each(getPropDef([], data, 'agg', 'info', 'group'), function (ai) {
+					addOption(ai, ' by ' + data.groupFields.join(', '));
+				});
+				underscore.each(getPropDef([], data, 'agg', 'info', 'pivot'), function (ai) {
+					addOption(ai, ' by ' + data.pivotFields.join(', '));
+				});
+				underscore.each(getPropDef([], data, 'agg', 'info', 'cell'), function (ai) {
+					addOption(ai);
+				});
+			}
+
+			// For pivotted data, there are three different aggregates we could graph.  We list them
+			// separately in the dropdown, and we want them in the order: cell, group, pivot.  It just so
+			// happens that this is also alphabetical order, so we just sort by the aggType first before
+			// sorting by the aggNum so the dropdown will be in the right order.
+
+			underscore.each(underscore.sortBy(underscore.sortBy(options, 'type'), 'num'), function (opt) {
+				var option = jQuery('<option>', {
+					'value': opt.name,
+					'data-wcdv-agg-type': opt.type,
+					'data-wcdv-agg-num': opt.num,
+				}).text(opt.name);
+				self.ui.aggDropdown.append(option);
+			});
+		}, 'Updating graph aggregate dropdown');
+	};
+
+	// #export {{{2
+
+	Graph.prototype.export = function () {
+		var self = this;
+
+		if (self.exportBlob == null) {
+			return;
+		}
+
+		var fileName = (self.opts.title || self.id) + '.png';
+		presentDownload(self.exportBlob, fileName);
+	};
+
+	// #_setExportBlob {{{2
+
+	Graph.prototype._setExportBlob = function (blob) {
+		var self = this;
+
+		self.exportBlob = blob;
+		self.ui.exportBtn.prop('disabled', blob == null);
+	};
+
+	// #_clearExportBlob {{{2
+
+	Graph.prototype._clearExportBlob = function () {
+		var self = this;
+
+		self.exportBlob = null;
+		self.ui.exportBtn.prop('disabled', true);
+	};
+
+	// #drawFromConfig {{{2
+
+	Graph.prototype.drawFromConfig = function () {
+		var self = this;
+
+		self.lastDrawnFrom = 'config';
+		self.renderer.draw(self.devConfig, self.userConfig);
+	};
+
+	// #drawInteractive {{{2
+
+	Graph.prototype.drawInteractive = function () {
+		var self = this;
+
+		var graphType = self.ui.graphTypeDropdown.val();
+		var minValue = self.ui.zeroAxisCheckbox.prop('checked') ? 0 : null;
+
+		var config = {
+			group: {
+				graphs: {},
+				current: graphType
+			},
+			pivot: {
+				graphs: {},
+				current: graphType
+			}
+		};
+
+		// NOTE The `graphType` field here is useless except that it makes the rendering function (e.g.
+		// GraphRendererGoogle#draw_plain) more convenient to implement.
+
+		var selOptIdx = self.ui.aggDropdown.get(0).selectedIndex;
+		var selOpt = self.ui.aggDropdown.get(0).options[selOptIdx];
+
+		config.group.graphs[graphType] = {
+			graphType: graphType,
+			aggType: selOpt.getAttribute('data-wcdv-agg-type'),
+			aggNum: toInt(selOpt.getAttribute('data-wcdv-agg-num')),
+			options: {}
+		};
+
+		// At least with Google Charts, you have to swap the horizontal and vertical axis configuration
+		// for bar charts (since they're on their side).
+
+		switch (graphType) {
+		case 'bar':
+			config.group.graphs[graphType].options = {
+				vAxis: {
+					minValue: minValue
+				}
+			};
+			break;
+		default:
+			config.group.graphs[graphType].options = {
+				vAxis: {
+					minValue: minValue
+				}
+			};
+		}
+
+		// Copy everything... not strictly necessary AFAIK, but it's safe.
+		config.pivot = deepCopy(config.group);
+
+		// Make sure to add the stack setting for pivot mode.
+		config.pivot.graphs[graphType].options.isStacked = self.ui.stackCheckbox.prop('checked');
+
+		// Store this configuration in the userConfig so that it can be saved with prefs.
+		underscore.extend(self.userConfig, config);
+
+		if (self.prefs != null) {
+			self.prefs.save();
+		}
+
+		debug.info('GRAPH', 'Drawing graph based on interactive config [userConfig = %O]', self.userConfig);
+
+		self.lastDrawnFrom = 'interactive';
+		self.renderer.draw(self.devConfig, self.userConfig);
+	};
+
+	// #checkGraphConfig {{{2
+
+	Graph.prototype.checkGraphConfig = function () {
+		if (self.devConfig == null) {
+			return;
+		}
+
+		underscore.each(['whenPlain', 'whenGroup', 'whenPivot'], function (dataFormat) {
+			if (self.devConfig[dataFormat] === undefined) {
+				return;
+			}
+
+			var config = self.devConfig[dataFormat];
+
+			// Check the "graphType" property.
+
+			if (config.graphType != null) {
+				if (!underscore.isString(config.graphType)) {
+					throw new Error('Graph config error: data format "' + dataFormat + '": `graphType` must be a string');
+				}
+
+				if (['area', 'bar', 'column', 'pie'].indexOf(config.graphType) === -1) {
+					throw new Error('Graph config error: data format "' + dataFormat + '": invalid `graphType`: ' + config.graphType);
+				}
+			}
+
+			switch (config.graphType) {
+			case 'area':
+			case 'bar':
+			case 'column':
+			case 'pie':
+				if (config.valueField != null && config.valueFields != null) {
+					throw new Error('Graph config error: data format "' + dataFormat + '": can\'t define both `valueField` and `valueFields`');
+				}
+
+				// Turn the singular "valueField" into the plural "valueFields."
+
+				if (config.valueField != null) {
+					if (!underscore.isString(config.valueField)) {
+						throw new Error('Graph config error: data format "' + dataFormat + '": `valueField` must be a string');
+					}
+					config.valueFields = [config.valueField];
+					delete config.valueField;
+				}
+
+				// Check the "valueFields" property, if it exists.
+
+				if (config.valueFields != null) {
+					if (!underscore.isArray(config.valueFields)) {
+						throw new Error('Graph config error: data format "' + dataFormat + '": `valueFields` must be an array');
+					}
+
+					underscore.each(config.valueFields, function (f, i) {
+						if (!underscore.isString(f)) {
+							throw new Error('Graph config error: data format "' + dataFormat + '": `valueFields[' + i + ']` must be a string');
+						}
+					});
+				}
+			}
+		});
+	};
+
+	// #refresh {{{2
+
+	/**
+	 * Refreshes the data from the data view in the grid.
+	 *
+	 * @method
+	 * @memberof Grid
+	 */
+
+	Graph.prototype.refresh = function () {
+		var self = this;
+
+		self.view.clearSourceData();
+	};
+
+	// #redraw {{{2
+
+	Graph.prototype.redraw = function () {
+		var self = this;
+
+		self.prefs.prime(function () {
+			self.view.prime(function () {
+				self.checkGraphConfig();
+				self.renderer = new GraphRendererGoogle(self, self.ui.graph, self.view, self.opts);
+				self.drawFromConfig();
+			}, {
+				who: self
+			});
+		}, {
+			who: self
+		});
+	};
+
+	// #hide {{{2
+
+	/**
+	 * Hide the grid.
+	 *
+	 * @method
+	 * @memberof Grid
+	 */
+
+	Graph.prototype.hide = function () {
+		var self = this;
+
+		debug.info('GRAPH', 'Hiding...');
+
+		self.ui.content.hide({
+			duration: 0,
+			done: function () {
+				if (self.opts.title) {
+					self.ui.showHideButton.removeClass('open fa-rotate-180');
+				}
+			}
+		});
+	};
+
+	// #show {{{2
+
+	/**
+	 * Make the grid visible.  If the grid has not been "run" yet, it will be done now.
+	 *
+	 * @param {object} [opts]
+	 *
+	 * @param {boolean} [opts.redraw=true]
+	 * If true, automatically redraw the grid after it has been shown.  This is almost always what you
+	 * want, unless you intend to manually call `redraw()` or `refresh()` immediately after showing it.
+	 */
+
+	Graph.prototype.show = function (opts) {
+		var self = this;
+
+		opts = deepDefaults(opts, {
+			redraw: true
+		});
+
+		debug.info('GRAPH', 'Showing...');
+
+		self.ui.content.show({
+			duration: 0,
+			done: function () {
+				if (self.opts.title) {
+					self.ui.showHideButton.addClass('open fa-rotate-180');
+				}
+				if (!self.hasRun && opts.redraw) {
+					self.hasRun = true;
+					self.redraw();
+				}
+			}
+		});
+	};
+
+	// #toggle {{{2
+
+	/**
+	 * Toggle graph visibility.
+	 */
+
+	Graph.prototype.toggle = function () {
+		var self = this;
+
+		if (self.ui.content.css('display') === 'none') {
+			self.show();
+		}
+		else {
+			self.hide();
+		}
+	};
+
+	// #isVisible {{{2
+
+	/**
+	 * Determine if the graph is currently visible.
+	 *
+	 * @returns {boolean}
+	 * True if the graph is currently visible, false if it is not.
+	 */
+
+	Graph.prototype.isVisible = function () {
+		var self = this;
+
+		return self.ui.content.css('display') !== 'none';
+	};
+
+	// #_setSpinner {{{2
+
+	/**
+	 * Set the type of the spinner icon.
+	 *
+	 * @param {string} what
+	 * The kind of spinner icon to show.  Must be one of: loading, not-loaded, working.
+	 */
+
+	Graph.prototype._setSpinner = function (what) {
+		var self = this;
+
+		switch (what) {
+		case 'loading':
+			self.ui.spinner.html(fontAwesome('F021', 'fa-spin', 'Loading...'));
+			break;
+		case 'not-loaded':
+			self.ui.spinner.html(fontAwesome('F05E', null, 'Not Loaded'));
+			break;
+		case 'working':
+			self.ui.spinner.html(fontAwesome('F1CE', 'fa-spin', 'Working...'));
+			break;
+		}
+	};
+
+	// #_showSpinner {{{2
+
+	/**
+	 * Show the spinner icon.
+	 */
+
+	Graph.prototype._showSpinner = function () {
+		var self = this;
+
+		self.ui.spinner.show();
+	};
+
+	// #_hideSpinner {{{2
+
+	/**
+	 * Hide the spinner icon.
+	 */
+
+	Graph.prototype._hideSpinner = function () {
+		var self = this;
+
+		self.ui.spinner.hide();
+	};
+
+	// #setUserConfig {{{2
+
+	Graph.prototype.setUserConfig = function (config) {
+		var self = this;
+
+		self.userConfig = config;
+
+		// When the constructor binds to prefs, this method can be called before the renderer is created.
+		// That's not a big deal, just don't do anything here if that's the case.
+
+		if (self.renderer != null) {
+			self.renderer.draw(self.devConfig, self.userConfig);
+		}
 	};
 
 	// GraphControl {{{1
 
-	var GraphControl = function () {
+	var GraphControl = makeSubclass('GraphControl', Object, function () {
 		var self = this;
 
 		self.ui = {};
-	};
-
-	GraphControl.prototype = Object.create(Object.prototype);
-	GraphControl.prototype.constructor = GraphControl;
+	});
 
 	// #draw {{{2
 
@@ -38673,16 +42192,6 @@
 		}, { limit: 1 });
 	};
 
-	// GraphControlField {{{1
-
-	var GraphControlField = function () {
-		var self = this;
-
-		self.ui = {};
-	};
-
-	GraphControlField.prototype = Object.create(Object.prototype);
-	GraphControlField.prototype.constructor = GraphControlField;
 
 	// GRAPH_TYPES {{{1
 
@@ -38717,7 +42226,7 @@
 	 * @file
 	 * This file contains the implementation of the prefs system.
 	 *
-	 * ### Terminology
+	 * ## Terminology
 	 *
 	 * - **Perspective**:
 	 *
@@ -38729,12 +42238,23 @@
 	 *
 	 * - **Reset**:
 	 *
-	 * ### Responsibilities
+	 * ## Responsibilities
 	 *
 	 * - Take configuration from bound components and store it in a backend.
 	 * - Retrieve configuration from a backend and load it into bound components.
 	 * - Allow management of perspectives, e.g. create new, rename, and delete.
 	 * - Facilitate switching between perspectives, including via history stack.
+	 *
+	 * ## Classes
+	 *
+	 * - {@link Prefs}
+	 * - {@link PrefsBackend}
+	 *   - {@link PrefsBackendLocalStorage}
+	 *   - {@link PrefsBackendTemporary}
+	 * - {@link PrefsModule}
+	 *   - {@link PrefsModuleView}
+	 *   - {@link PrefsModuleGrid}
+	 *   - {@link PrefsModuleGraph}
 	 */
 
 	// Prefs {{{1
@@ -38750,6 +42270,10 @@
 	 * Maps module names to the target instances those modules control.
 	 *
 	 * @param {object} [opts]
+	 *
+	 * @param {boolean} [opts.autoSave=true]
+	 *
+	 * If true, save preferences automatically any time they change.
 	 *
 	 * @param {object} [opts.backend]
 	 *
@@ -38818,7 +42342,8 @@
 		self.bardo = {};
 		self.primeLock = new Lock('Prefs Prime');
 
-		opts = deepDefaults(opts, {
+		self.opts = deepDefaults(opts, {
+			autoSave: true,
 			saveCurrent: true,
 			savePerspectives: true,
 			backend: {
@@ -38830,15 +42355,15 @@
 
 		// Create the backend for saving preferences.
 
-		if (!PREFS_BACKEND_REGISTRY.isSet(opts.backend.type)) {
+		if (!PREFS_BACKEND_REGISTRY.isSet(self.opts.backend.type)) {
 			throw new Error('PREFS BACKEND IS NOT REGISTERED'); // XXX
 		}
 
-		var backendCtor = PREFS_BACKEND_REGISTRY.get(opts.backend.type);
-		var backendCtorOpts = opts.backend[opts.backend.type];
+		var backendCtor = PREFS_BACKEND_REGISTRY.get(self.opts.backend.type);
+		var backendCtorOpts = self.opts.backend[self.opts.backend.type];
 
-		self.debug('Creating new preferences backend: id = "%s" ; type = %s ; opts = %O',
-			self.id, opts.backend.type, backendCtorOpts);
+		self.debug(null, 'Creating new preferences backend: id = "%s" ; type = %s ; opts = %O',
+			self.id, self.opts.backend.type, backendCtorOpts);
 
 		// If creating the backend fails for any reason (e.g. unable to access localStorage) then fall
 		// back to a "temporary" prefs backend that doesn't actually save or load anything.
@@ -38871,7 +42396,25 @@
 
 	Prefs.DEFAULT_BACKEND_TYPE = 'localStorage';
 
-	// Events {{{2
+	// Mixins {{{2
+
+	mixinEventHandling(Prefs, [
+		'perspectiveAdded'   // Fired when a perspective is added.
+	, 'perspectiveDeleted' // Fired when a perspective is deleted.
+	, 'perspectiveRenamed' // Fired when a perspective is renamed.
+	, 'perspectiveChanged' // Fired when the current perspective has changed.
+	, 'prefsHistoryStatus'
+	, 'prefsReset'
+	, 'prefsChanged'
+	, 'prefsSaved'
+	, 'moduleBound'
+	, 'primed'
+	]);
+
+	mixinDebugging(Prefs);
+	mixinLogging(Prefs);
+
+	// Event JSDoc {{{3
 
 	/**
 	 * Fired when a new perspective is added.
@@ -38951,28 +42494,19 @@
 	 * Any additional options passed by the target when it bound itself to a module in the prefs system.
 	 */
 
-	mixinEventHandling(Prefs, function (self) {
-		return 'PREFS (' + self.id + ')';
-	}, [
-			'perspectiveAdded'   // Fired when a perspective is added.
-		, 'perspectiveDeleted' // Fired when a perspective is deleted.
-		, 'perspectiveRenamed' // Fired when a perspective is renamed.
-		, 'perspectiveChanged' // Fired when the current perspective has changed.
-		, 'prefsHistoryStatus'
-		, 'prefsReset'
-		, 'moduleBound'
-		, 'primed'
-	]);
+	// #toString {{{2
 
-	mixinDebugging(Prefs, function () {
-		return 'PREFS (' + this.id + ')';
-	});
+	Prefs.prototype.toString = function () {
+		var self = this;
+		return 'Prefs (' + self.id + ', ' + self.opts.backend.type + ')';
+	};
 
-	mixinLogging(Prefs, function () {
-		return 'PREFS (' + this.id + ')';
-	});
+	// #getDebugTag {{{2
 
-	//delegate(Prefs, 'backend', ['getPerspectives', 'getCurrent']);
+	Prefs.prototype.getDebugTag = function () {
+		var self = this;
+		return 'PREFS {id="' + self.id + '", backend=' + self.opts.backend.type + '}';
+	};
 
 	// #init {{{2
 
@@ -38987,7 +42521,7 @@
 			return;
 		}
 
-		self.debug('Initializing prefs system');
+		self.debug(null, 'Initializing prefs system');
 
 		self.isInitialized = true;
 		self.perspectives = {};
@@ -39040,6 +42574,7 @@
 
 		var makeFinishCont = function (status) {
 			return function () {
+				self.debug('PRIMING', 'End');
 				self.isPrimed = true;
 				self.primeLock.unlock();
 				return cont(status);
@@ -39048,12 +42583,12 @@
 
 		self.init();
 
-		self.debug('Priming');
+		self.debug('PRIMING', 'Begin');
 
 		return self.backend.getPerspectives(function (ids) {
 			self.availablePerspectives = underscore.union(self.availablePerspectives, ids);
 			self.backend.loadAll(function (perspectives) {
-				asyncEach(underscore.values(perspectives), function (x, next) {
+				asyncEach(underscore.values(perspectives), function (x, i, next) {
 					self.addPerspective(x.id, x.name, x.config, null, next, {
 						switch: false
 					});
@@ -39061,7 +42596,7 @@
 					// When there's already a current perspective (as would be the case when prefs have been
 					// pre-configured), we don't have to do anything else.
 
-					self.debug('Priming: Finished adding all perspectives');
+					self.debug('PRIMING', 'Finished adding all perspectives');
 
 					// Fire the 'primed' event, which potentially gives a receiver the chance to set the current
 					// perspective before we try to do it ourselves.
@@ -39074,7 +42609,7 @@
 					else if (self.availablePerspectives.length === 0) {
 						// There are no perspectives available, so we need to make a basic one.
 
-						self.debug('Priming: No perspectives exist, creating one');
+						self.debug('PRIMING', 'No perspectives exist, creating one');
 
 						return self.addMainPerspective(makeFinishCont(true));
 					}
@@ -39085,7 +42620,7 @@
 							if (currentId == null) {
 								// There's no current perspective, somehow, so again just create one.
 
-								self.debug('Priming: No current perspective set, creating one');
+								self.debug('PRIMING', 'No current perspective set, creating one');
 
 								return self.addMainPerspective(makeFinishCont(true));
 							}
@@ -39354,7 +42889,7 @@
 				id = p.id;
 			}
 
-			self.debug('Adding new perspective: id = "%s" ; name = "%s" ; config = %O', id, name, config);
+			self.debug(null, 'Adding new perspective: id = "%s" ; name = "%s" ; config = %O', id, name, config);
 
 			if (self.availablePerspectives.indexOf(id) < 0) {
 				self.availablePerspectives.push(id);
@@ -39372,13 +42907,12 @@
 		};
 
 		if (self.currentPerspective) {
-			return self.save(function () {
-				if (config == null) {
-					config = deepCopy(self.currentPerspective.config);
-					needToLoad = false; // Don't need to load, because this is the current config.
-				}
-				return addPerspective();
-			});
+			self.save();
+			if (config == null) {
+				config = deepCopy(self.currentPerspective.config);
+				needToLoad = false; // Don't need to load, because this is the current config.
+			}
+			return addPerspective();
 		}
 		else if (config == null) {
 			config = {};
@@ -39469,6 +43003,7 @@
 			// When we've deleted all the perspectives, we need to make a new one.
 
 			if (self.availablePerspectives.length === 0) {
+				self.currentPerspective = null;
 				return self.addMainPerspective(cont);
 			}
 
@@ -39600,14 +43135,14 @@
 		// Make sure a perspective with the old name exists.
 
 		if (self.perspectives[id] == null) {
-			throw new Error(sprintf.sprintf('Perspective does not exist: id = "%s"', id));
+			throw new Error(sprintf$1.sprintf('Perspective does not exist: id = "%s"', id));
 		}
 
 		// Check to see if there are any other perspectives with the same name.
 
 		underscore.each(self.perspectives, function (p) {
 			if (p.name === newName) {
-				log.warn(sprintf.sprintf('Renaming perspective (id = "%s") now shares the name "%s" with a different perspective (id = "%s")',
+				log.warn(sprintf$1.sprintf('Renaming perspective (id = "%s") now shares the name "%s" with a different perspective (id = "%s")',
 					id, newName, p.id));
 			}
 		});
@@ -39719,7 +43254,7 @@
 			});
 		}
 
-		self.debug('Switching to perspective: id = "%s"', id);
+		self.debug(null, 'Switching to perspective: id = "%s"', id);
 
 		self.currentPerspective = self.perspectives[id];
 
@@ -39727,19 +43262,26 @@
 			self._resetHistory(self.currentPerspective);
 		}
 
-		if (opts.loadPerspective) {
-			return self.currentPerspective.load(null, function () {
-				if (opts.sendEvent) {
-					self.fire('perspectiveChanged', {
-						notTo: opts.dontSendEventTo
-					}, id);
-				}
-				self.backend.setCurrent(id, function (ok) {
-					return cont(ok);
-				});
-			});
-		}
+		// FIXME: Firing `perspectiveChanged` causes the grid to be redrawn, which isn't necessary when
+		// we're not loading the perspective (e.g. because we've just created a new one).
 
+		var afterLoad = function () {
+			if (opts.sendEvent) {
+				self.fire('perspectiveChanged', {
+					notTo: opts.dontSendEventTo
+				}, id);
+			}
+			self.backend.setCurrent(id, function (ok) {
+				return cont(ok);
+			});
+		};
+
+		if (opts.loadPerspective) {
+			return self.currentPerspective.load(null, afterLoad);
+		}
+		else {
+			return afterLoad();
+		}
 	};
 
 	// #setCurrentPerspectiveByName {{{2
@@ -39759,6 +43301,9 @@
 
 	/**
 	 * Saves the current perspective using the backend.
+	 *
+	 * @param {PrefsBackend~save_cont} [cont]
+	 * Called when the backend has finished saving preferences.
 	 */
 
 	Prefs.prototype.save = function (cont) {
@@ -39774,8 +43319,45 @@
 			return cont(false);
 		}
 
+		if (self.opts.autoSave) {
+			self.reallySave(cont);
+		}
+		else {
+			self.currentPerspective.isUnsaved = true;
+			self.fire('prefsChanged');
+		}
+	};
+
+	// #reallySave {{{2
+
+	/**
+	 * Saves the current perspective using the backend.
+	 *
+	 * @param {PrefsBackend~save_cont} [cont]
+	 * Called when the backend has finished saving preferences.
+	 */
+
+	Prefs.prototype.reallySave = function (cont) {
+		var self = this;
+
+		if (cont != null && typeof cont !== 'function') {
+			throw new Error('Call Error: `cont` must be null or a function');
+		}
+
+		cont = cont || I;
+
+		if (self.currentPerspective.opts.isTemporary) {
+			return cont(false);
+		}
+
 		self.currentPerspective.save(function () {
-			self.backend.save(self.currentPerspective, cont);
+			self.backend.save(self.currentPerspective, function (ok) {
+				if (ok) {
+					self.currentPerspective.isUnsaved = false;
+					self.fire('prefsSaved');
+				}
+				return cont(ok);
+			});
 		});
 	};
 
@@ -39811,7 +43393,7 @@
 
 		underscore.each(self.perspectives, function (p) {
 			if (p.opts.isTemporary && p.opts.isEssential) {
-				self.debug('Saving temporary essential perspective: %s', p.id);
+				self.debug(null, 'Saving temporary essential perspective: %s', p.id);
 				self.bardo[p.id] = {
 					id: p.id,
 					name: p.name,
@@ -39831,12 +43413,12 @@
 
 			underscore.each(self.modules, function (module, moduleName) {
 				if (typeof module.reset === 'function') {
-					self.debug('Resetting module: moduleName = %s', moduleName);
+					self.debug(null, 'Resetting module: moduleName = %s', moduleName);
 					module.reset();
 				}
 			});
 
-			self.debug('Restoring temporary essential perspectives: %s', JSON.stringify(underscore.keys(self.bardo)));
+			self.debug(null, 'Restoring temporary essential perspectives: %s', JSON.stringify(underscore.keys(self.bardo)));
 
 			underscore.each(self.bardo, function (p) {
 				self.addPerspective(p.id, p.name, p.config, p.opts, null, { switch: false });
@@ -39915,6 +43497,18 @@
 	// #save {{{2
 
 	/**
+	 * Callback for when the prefs are done being saved.
+	 *
+	 * @callback PrefsBackend~save_cont
+	 *
+	 * @param {boolean} ok
+	 * If true, then the operation was successful; if false, then an error occurred.
+	 *
+	 * @param {string} [errmsg]
+	 * If `ok` is false, this is the error that occurred.
+	 */
+
+	/**
 	 * Saves the configuration for the specified perspective.  A subclass implementation need not
 	 * support saving perspectives individually, but that's how this function is called.  (For example,
 	 * an implementation could update the `id` perspective in a big object containing all available
@@ -39923,7 +43517,7 @@
 	 * @abstract
 	 *
 	 * @param {Perspective} perspective
-	 * @param {function} [cont]
+	 * @param {PrefsBackend~save_cont} [cont]
 	 */
 
 	PrefsBackend.prototype.save = function (perspective, cont) {
@@ -40100,11 +43694,11 @@
 		var perspective = getProp(storedPrefObj, self.id, 'perspectives', id);
 
 		if (perspective == null) {
-			self.debug('Perspective does not exist: id = "%s"', id);
+			self.debug(null, 'Perspective does not exist: id = "%s"', id);
 			return cont(null);
 		}
 
-		self.debug('Loaded perspective: id = "%s" ; name = "%s" ; config = %O',
+		self.debug(null, 'Loaded perspective: id = "%s" ; name = "%s" ; config = %O',
 			perspective.id, perspective.name, perspective.config);
 
 		return cont(perspective);
@@ -40138,7 +43732,7 @@
 		}
 
 		var perspectives = getPropDef({}, storedPrefObj, self.id, 'perspectives');
-		self.debug('Loaded all perspectives: %O', perspectives);
+		self.debug(null, 'Loaded all perspectives: %O', perspectives);
 		return cont(perspectives);
 	};
 
@@ -40147,7 +43741,7 @@
 	PrefsBackendLocalStorage.prototype.migrate = function (version, cont) {
 		var self = this;
 
-		self.debug('Migrating prefs: v%d -> v%d', version, self.version);
+		self.debug(null, 'Migrating prefs: v%d -> v%d', version, self.version);
 
 		for (var i = version; i < self.version; i += 1) {
 			switch (i) {
@@ -40253,7 +43847,7 @@
 
 		cont = cont || I;
 
-		self.debug('Saving perspective: id = "%s" ; name = "%s" ; config = %O',
+		self.debug(null, 'Saving perspective: id = "%s" ; name = "%s" ; config = %O',
 			perspective.id, perspective.name, perspective.config);
 
 		var storedPrefData = JSON.parse(localStorage.getItem(self.localStorageKey) || '{}');
@@ -40280,7 +43874,7 @@
 		var storedPrefData = JSON.parse(localStorage.getItem(self.localStorageKey) || '{}');
 		var perspectives = underscore.keys(getPropDef({}, storedPrefData, self.id, 'perspectives'));
 
-		self.debug('Found %d perspectives: %s', perspectives.length, JSON.stringify(perspectives));
+		self.debug(null, 'Found %d perspectives: %s', perspectives.length, JSON.stringify(perspectives));
 
 		return cont(perspectives);
 	};
@@ -40297,7 +43891,7 @@
 		var storedPrefData = JSON.parse(localStorage.getItem(self.localStorageKey) || '{}');
 		var current = getProp(storedPrefData, self.id, 'current');
 
-		self.debug('Current perspective is "%s"', current);
+		self.debug(null, 'Current perspective is "%s"', current);
 
 		return cont(current);
 	};
@@ -40316,7 +43910,7 @@
 
 		cont = cont || I;
 
-		self.debug('Setting current perspective to "%s"', id);
+		self.debug(null, 'Setting current perspective to "%s"', id);
 
 		var storedPrefData = JSON.parse(localStorage.getItem(self.localStorageKey) || '{}');
 		setProp(self.version, storedPrefData, self.id, 'version');
@@ -40343,7 +43937,7 @@
 
 		cont = cont || I;
 
-		self.debug('Renaming perspective: "%s" -> "%s"', oldName, newName);
+		self.debug(null, 'Renaming perspective: "%s" -> "%s"', oldName, newName);
 
 		var storedPrefData = JSON.parse(localStorage.getItem(self.localStorageKey) || '{}');
 		storedPrefData[self.id]['perspectives'][newName] = storedPrefData[self.id]['perspectives'][oldName];
@@ -40367,7 +43961,7 @@
 
 		cont = cont || I;
 
-		self.debug('Deleting perspective: "%s"', id);
+		self.debug(null, 'Deleting perspective: "%s"', id);
 
 		var storedPrefData = JSON.parse(localStorage.getItem(self.localStorageKey) || '{}');
 		delete storedPrefData[self.id]['perspectives'][id];
@@ -40387,7 +43981,7 @@
 
 		cont = cont || I;
 
-		self.debug('Resetting perspectives');
+		self.debug(null, 'Resetting perspectives');
 
 		var storedPrefData = JSON.parse(localStorage.getItem(self.localStorageKey) || '{}');
 		delete storedPrefData[self.id];
@@ -40436,11 +44030,11 @@
 		var perspective = self.storage.perspectives[id];
 
 		if (perspective == null) {
-			self.debug('Perspective does not exist: id = "%s"', id);
+			self.debug(null, 'Perspective does not exist: id = "%s"', id);
 			return cont(null);
 		}
 
-		self.debug('Loaded perspective: id = "%s" ; name = "%s" ; config = %O',
+		self.debug(null, 'Loaded perspective: id = "%s" ; name = "%s" ; config = %O',
 			perspective.id, perspective.name, perspective.config);
 
 		return cont(perspective);
@@ -40456,7 +44050,7 @@
 		}
 
 		var perspectives = self.storage.perspectives;
-		self.debug('Loaded all perspectives: %O', perspectives);
+		self.debug(null, 'Loaded all perspectives: %O', perspectives);
 		return cont(perspectives);
 	};
 
@@ -40474,7 +44068,7 @@
 
 		cont = cont || I;
 
-		self.debug('Saving perspective: id = "%s" ; name = "%s" ; config = %O',
+		self.debug(null, 'Saving perspective: id = "%s" ; name = "%s" ; config = %O',
 			perspective.id, perspective.name, perspective.config);
 
 		self.storage.perspectives[perspective.id] = {
@@ -40497,7 +44091,7 @@
 
 		var perspectives = underscore.keys(self.storage.perspectives);
 
-		self.debug('Found %d perspectives: %s', perspectives.length, JSON.stringify(perspectives));
+		self.debug(null, 'Found %d perspectives: %s', perspectives.length, JSON.stringify(perspectives));
 
 		return cont(perspectives);
 	};
@@ -40513,7 +44107,7 @@
 
 		var current = self.storage.current;
 
-		self.debug('Current perspective is "%s"', current);
+		self.debug(null, 'Current perspective is "%s"', current);
 
 		return cont(current);
 	};
@@ -40532,7 +44126,7 @@
 
 		cont = cont || I;
 
-		self.debug('Setting current perspective to "%s"', id);
+		self.debug(null, 'Setting current perspective to "%s"', id);
 
 		self.storage.current = id;
 
@@ -40556,7 +44150,7 @@
 
 		cont = cont || I;
 
-		self.debug('Renaming perspective: "%s" -> "%s"', oldName, newName);
+		self.debug(null, 'Renaming perspective: "%s" -> "%s"', oldName, newName);
 
 		self.storage.perspectives[newName] = self.storage.perspectives[oldName];
 		delete self.storage.perspectives[oldName];
@@ -40578,7 +44172,7 @@
 
 		cont = cont || I;
 
-		self.debug('Deleting perspective: "%s"', id);
+		self.debug(null, 'Deleting perspective: "%s"', id);
 
 		delete self.storage.perspectives[id];
 
@@ -40596,7 +44190,7 @@
 
 		cont = cont || I;
 
-		self.debug('Resetting perspectives');
+		self.debug(null, 'Resetting perspectives');
 
 		self.storage = {
 			perspectives: {}
@@ -40687,56 +44281,66 @@
 
 		if (config.filter == null) {
 			self.target.clearFilter({
-				updateData: false
+				updateData: false,
+				savePrefs: false
 			});
 		}
 		else {
 			self.target.setFilter(config.filter, null, {
-				updateData: false
+				updateData: false,
+				savePrefs: false
 			});
 		}
 
 		if (config.sort == null) {
 			self.target.clearSort({
-				updateData: false
+				updateData: false,
+				savePrefs: false
 			});
 		}
 		else {
 			self.target.setSort(config.sort, {
-				updateData: false
+				updateData: false,
+				savePrefs: false
 			});
 		}
 
 		if (config.group == null) {
 			self.target.clearGroup({
-				updateData: false
+				updateData: false,
+				savePrefs: false
 			});
 		}
 		else {
 			self.target.setGroup(config.group, {
-				updateData: false
+				updateData: false,
+				savePrefs: false
 			});
 		}
 
 		if (config.pivot == null) {
 			self.target.clearPivot({
-				updateData: false
+				updateData: false,
+				savePrefs: false
 			});
 		}
 		else {
 			self.target.setPivot(config.pivot, {
-				updateData: false
+				updateData: false,
+				savePrefs: false
 			});
 		}
 
 		if (config.aggregate == null) {
 			self.target.clearAggregate({
-				updateData: false
+				updateData: false,
+				savePrefs: false
 			});
 		}
 		else {
 			self.target.setAggregate(config.aggregate, {
-				updateData: false
+				updateData: false,
+				savePrefs: false
 			});
 		}
 	};
@@ -40793,7 +44397,8 @@
 		var self = this;
 
 		self.target.reset({
-			updateData: false
+			updateData: false,
+			savePrefs: false
 		});
 	};
 
@@ -41004,6 +44609,9 @@
 	 * @property {object} config See above.
 	 * @property {Object.<string,PrefsModule>} modules See above.
 	 * @property {object} opts See above.
+	 *
+	 * @property {boolean} isUnsaved
+	 * If true, then the perspective has been changed and needs to be saved.
 	 */
 
 	var Perspective = makeSubclass('Perspective', Object, function (id, name, config, modules, opts) {
@@ -41028,6 +44636,7 @@
 		self.name = name;
 		self.config = config;
 		self.modules = modules;
+		self.isUnsaved = false;
 		self.opts = deepDefaults(opts, {
 			isEssential: false,
 			isTemporary: false,
@@ -41036,7 +44645,7 @@
 	});
 
 	mixinDebugging(Perspective, function () {
-		return sprintf.sprintf('PREFS // PERSPECTIVE (%s)', this.id);
+		return sprintf$1.sprintf('PREFS // PERSPECTIVE (%s)', this.id);
 	});
 
 	// #load {{{2
@@ -41060,12 +44669,12 @@
 			modules = underscore.keys(self.modules);
 		}
 
-		self.debug('Loading perspective using these modules: %s', JSON.stringify(modules));
+		self.debug(null, 'Loading perspective using these modules: %s', JSON.stringify(modules));
 
 		// Go through every module that we have preferences for and load them into the bound components.
 
 		underscore.each(modules, function (moduleName) {
-			self.debug('Loading module: moduleName = %s ; config = %O', moduleName, self.config[moduleName]);
+			self.debug(null, 'Loading module: moduleName = %s ; config = %O', moduleName, self.config[moduleName]);
 			self.modules[moduleName].load(self.config[moduleName]);
 		});
 
@@ -41089,13 +44698,13 @@
 
 		cont = cont || I;
 
-		self.debug('Saving perspective');
+		self.debug(null, 'Saving perspective');
 
 		// Go through every module that we have preferences for and save them from the bound components.
 
 		underscore.each(self.modules, function (module, moduleName) {
 			self.config[moduleName] = module.save();
-			self.debug('Saving module: moduleName = %s ; config = %O', moduleName, self.config[moduleName]);
+			self.debug(null, 'Saving module: moduleName = %s ; config = %O', moduleName, self.config[moduleName]);
 		});
 
 		return cont(self.config);
@@ -41121,8 +44730,11 @@
 	PREFS_MODULE_REGISTRY.set('graph', PrefsModuleGraph);
 	PREFS_MODULE_REGISTRY.set('meta', PrefsModuleMeta);
 
+	// Imports {{{1
+
 	// View {{{1
 	// JSDoc Types {{{2
+	// View~Data {{{3
 
 	/**
 	 * @typedef View~Data
@@ -41133,6 +44745,8 @@
 	 * @property {Array.<View~Data_Row>} data
 	 */
 
+	// View~Data_Row {{{3
+
 	/**
 	 * @typedef View~Data_Row
 	 *
@@ -41142,6 +44756,8 @@
 	 * @property {Object.<string, View~Data_Field>} rowData Contains the data for the row; keys are
 	 * field names, and values are objects representing the value of that field within the row.
 	 */
+
+	// View~Data_Field {{{3
 
 	/**
 	 * @typedef View~Data_Field
@@ -41159,6 +44775,8 @@
 	 * the cell when the table is output.
 	 */
 
+	// View~Data_Field_Render {{{3
+
 	/**
 	 * A function called by the GridTable instance to produce a value that will be placed into a cell in
 	 * the table output.  An example usage would be to create a link based on the value of the cell.
@@ -41168,12 +44786,16 @@
 	 * @returns {Element|jQuery|string} What should be put into the cell in the table output.
 	 */
 
+	// View~FilterSpec {{{3
+
 	/**
 	 * @typedef {Object<string,string>|Object<string,View~FilterSpecValue>} View~FilterSpec
 	 * The specification used for filtering within a data view.  The keys are column names, and the
 	 * values are either strings (implying an equality relationship) or objects indicating a more
 	 * complex relationship.
 	 */
+
+	// View~FilterSpecValue {{{3
 
 	/**
 	 * @typedef {Object<string,any>} View~FilterSpecValue
@@ -41190,21 +44812,55 @@
 	 * @property {Array.<string|number>} [$nin] Allow things that are not elements of the set value.
 	 */
 
+	// View~GroupSpec {{{3
+
 	/**
 	 * @typedef {object} View~GroupSpec
-	 * An object telling how to group the data.
+	 * Specifies how to group the data.
 	 *
-	 * @property {string[]} fieldNames
-	 * List of the fields to group by.
+	 * @property {Array.<View~GroupSpecElt|string>} fieldNames
+	 * List of the fields to group by.  When an element is a string, that's the same as being an object
+	 * with only the `field` property, i.e. `['foo'] = [{field: 'foo'}]`.
+	 *
+	 * @property {Array.<Array.<string>>} addRowVals
+	 * Additional rowvals to add, even if they don't exist in the data naturally.
 	 */
+
+	// View~GroupSpecElt {{{3
+
+	/**
+	 * @typedef {object} View~GroupSpecElt
+	 *
+	 * @property {string} field
+	 * Name of the field to use for grouping.
+	 *
+	 * @property {function} [fun]
+	 * Name of a {@link GroupFunction} from the {@link GROUP_FUNCTION_REGISTRY} to change how we group
+	 * by this field.
+	 */
+
+	// View~PivotSpec {{{3
 
 	/**
 	 * @typedef {object} View~PivotSpec
 	 * An object telling how to pivot the data.
 	 *
-	 * @property {string[]} fieldNames
-	 * List of the fields to pivot by.
+	 * @property {Array.<object|string>} fieldNames
+	 * List of the fields to pivot by.  When an element is a string, that's the same as being an object
+	 * with only the `field` property, i.e. `['foo'] = [{field: 'foo'}]`.
+	 *
+	 * @property {string} fieldNames[].field
+	 * Name of the field to use for pivotting.
+	 *
+	 * @property {function} [fieldNames[].fun]
+	 * Name of a {@link GroupFunction} from the {@link GROUP_FUNCTION_REGISTRY} to change how we pivot
+	 * by this field.
+	 *
+	 * @property {Array.<Array.<string>>} addColVals
+	 * Additional colvals to add, even if they don't exist in the data naturally.
 	 */
+
+	// View~AggregateSpec {{{3
 
 	/**
 	 * @typedef {object} View~AggregateSpec
@@ -41226,6 +44882,8 @@
 	 * Aggregate functions applied over all rows.  Calculated for both group summary output and pivot
 	 * output.
 	 */
+
+	// View~AggregateTypeSpec {{{3
 
 	/**
 	 * @typedef {object} View~AggregateTypeSpec
@@ -41252,6 +44910,94 @@
 	 * @property {boolean} [shouldGraph=false]
 	 * If true, then this aggregate should be used for graphing.
 	 */
+
+	// View~SortSpec {{{3
+
+	/**
+	 * @typedef {object} View~SortSpec
+	 *
+	 * @property {View~SortSpecVert} vertical
+	 * @property {View~SortSpecHoriz} horizontal
+	 */
+
+	/**
+	 * @typedef {View~SortSpecVertPlain|View~SortSpecVertGroup|View~SortSpecVertPivot} View~SortSpecVert
+	 *
+	 * @property {string} dir
+	 * Which direction to sort, either "ASC" or "DESC".
+	 */
+
+	/**
+	 * @typedef {object} View~SortSpecVertPlain
+	 *
+	 * @property {string} field
+	 * @property {Array.<string>} [values]
+	 */
+
+	/**
+	 * @typedef {object} View~SortSpecVertGroup
+	 *
+	 * @property {string} [field]
+	 * @property {number} [groupFieldIndex]
+	 * @property {Array.<string>} [values]
+	 * @property {string} [aggType]
+	 * @property {number} [aggNum]
+	 */
+
+	/**
+	 * @typedef {object} View~SortSpecVertPivot
+	 *
+	 * @property {string} [field]
+	 * @property {string} [groupFieldIndex]
+	 * @property {Array.<string>} [values]
+	 * This is sort method #1.
+	 *
+	 * @property {Array.<string>} [colVal]
+	 * @property {number} [colValIndex]
+	 * Reorders rowvals (i.e. sorting vertically) by the result of a cell aggregate function applied to
+	 * data with the specified colval.  Use `aggNum` to indicate which.  This is sort method #4.
+	 *
+	 * @property {string} [aggType]
+	 * Setting this to "group" indicates reordering rowvals (i.e. sorting vertically) by the result of a
+	 * group aggregate function.  Use `aggNum` to indicate which one.  This is sort method #6.
+	 *
+	 * @property {number} [aggNum]
+	 * The number of the aggregate to use for sorting.  Used when:
+	 *   - Using `colVal` or `colValIndex`.
+	 *   - Using `{aggType: 'group'}`.
+	 */
+
+	/**
+	 * @typedef {View~SortSpecHorizPivot} View~SortSpecHoriz
+	 *
+	 * @property {string} dir
+	 * Which direction to sort, either "ASC" or "DESC".
+	 */
+
+	/**
+	 * @typedef {object} View~SortSpecHorizPivot
+	 *
+	 * @property {string} [field]
+	 * @property {string} [pivotFieldIndex]
+	 * @property {Array.<string>} [values]
+	 * This is sort method #3.
+	 *
+	 * @property {Array.<string>} [rowVal]
+	 * @property {number} [rowValIndex]
+	 * Reorders colvals (i.e. sorting horizontally) by the result of a cell aggregate function applied
+	 * to data with the specified rowval.  Use `aggNum` to indicate which.  This is sort method #2.
+	 *
+	 * @property {string} [aggType]
+	 * Setting this to "pivot" indicates reordering colvals (i.e. sorting horizontally) by the result of
+	 * a pivot aggregate function.  Use `aggNum` to indicate which one.  This is sort method #5.
+	 *
+	 * @property {number} [aggNum]
+	 * The number of the aggregate to use for sorting.  Used when:
+	 *   - Using `rowVal` or `rowValIndex`.
+	 *   - Using `{aggType: 'pivot'}`.
+	 */
+
+	// View~OperationsPerformed {{{3
 
 	/**
 	 * @typedef {object} View~OperationsPerformed
@@ -41280,18 +45026,18 @@
 	 *
 	 * @property {Source} source
 	 *
-	 * @property {Object} sortSpec
+	 * @property {View~FilterSpec} filterSpec
 	 *
-	 * @property {Object} groupSpec
+	 * @property {View~SortSpec} sortSpec
 	 *
-	 * @property {Array.<string>} groupSpec.fieldNames
+	 * @property {View~GroupSpec} groupSpec
 	 *
-	 * @property {Function} groupSpec.aggregate
+	 * @property {View~PivotSpec} pivotSpec
 	 *
 	 * @property {Timing} timing For keeping track of how long it takes to do things in the view.
 	 */
 
-	var View = function (source, name, opts) {
+	var View = makeSubclass('View', Object, function (source, name, opts) {
 		var self = this;
 
 		if (!(source instanceof Source) && !(source instanceof View)) {
@@ -41311,35 +45057,81 @@
 		self.source = source;
 		self.opts = opts;
 
-		self.source.on(Source.events.dataUpdated, function () {
+		self.source.on('dataUpdated', function () {
 			self.clearCache();
 			self.fire('dataUpdated');
 		});
+
+		self.source.on('fetchDataCancel', function () {
+			self.lock.clear();
+		});
+
+		self.echo(self.source, ['fetchDataBegin', 'fetchDataEnd']);
 
 		self.name = name || source.getName() || gensym();
 		self.colConfig = new OrdMap();
 
 		self.timing = new Timing();
 
-		self.lock = new Lock('View');
+		self.lock = new Lock(self.getDebugTag());
 
+		// Set the default configuration for a new View.  Setting explicit defaults is a good practice to
+		// maintain, but it also makes sure that when prefs are loaded later, any `null` values they set
+		// compare correctly to what we already have, and not make it look like something has changed.
+
+		self.sortSpec = null;
+		self.filterSpec = null;
+		self.groupSpec = null;
+		self.pivotSpec = null;
 		self.aggregateSpec = objFromArray(['group', 'pivot', 'cell', 'all'], [[{fun: 'count'}]]);
 
 		if (self.opts.prefs != null) {
 			self.prefs = opts.prefs;
 		}
 		else {
-			debug.info('VIEW (' + self.name + ')', 'Creating new Prefs instance');
+			self.debug(null, 'Creating new Prefs instance');
 			self.prefs = new Prefs(self.name);
 		}
 
 		self.isBoundToPrefs = false;
-	};
+	});
 
-	View.prototype = Object.create(Object.prototype);
-	View.prototype.constructor = View;
+	// Mixins {{{2
 
-	// Events {{{2
+	mixinEventHandling(View, [
+		'fetchDataBegin'      // Started fetching data from the source.
+	, 'fetchDataEnd'        // Done fetching data from the source.
+	, 'getTypeInfo'         // Type information has been retrieved from the source.
+	, 'dataUpdated'         // The data has changed in the source.
+	, 'workBegin'           // The view has started operating on the data.
+	, 'workEnd'             // The view has finished operating on the data.
+
+	, 'sortSet'             // When the sort has been set.  Args: (field, direction)
+	, 'filterSet'           // When the filter has been set.  Args: (spec)
+	, 'groupSet'            // When the grouping has been set.  Args: (spec)
+	, 'pivotSet'            // When the pivot config has been set.  Args: (spec)
+	, 'aggregateSet'        // When the aggregate config has been set.  Args: (spec)
+
+	, 'sortBegin'           // A sort operation has started.
+	, 'sort'                // Sort information for a row is available.
+	, 'sortEnd'             // A sort operation has finished.
+	, 'filterBegin'         // A filter operation has started.
+	, 'filter'              // Filter information for a row is available.
+	, 'filterEnd'           // A filter operation has finished.
+
+	, 'invalidFilterField'  // A filtered field does not exist in the source data.
+	, 'invalidGroupField'   // A grouped field does not exist in the source data.
+	, 'invalidPivotField'   // A pivotted field does not exist in the source data.
+	, 'invalidSortField'    // A sorted field does not exist in the source data.
+	, 'invalidAggregate'    // An aggregate function is invalid.
+	]);
+
+	delegate(View, 'source', ['getUniqueVals', 'convertAll', 'setToolbar']);
+
+	mixinDebugging(View);
+	mixinLogging(View);
+
+	// Event JSDoc {{{3
 
 	/**
 	 * Fired when the view has started getting data from the source.
@@ -41491,39 +45283,19 @@
 	 * @event View#invalidAggregate
 	 */
 
-	mixinEventHandling(View, function (self) {
-		return 'VIEW (' + self.name + ')';
-	}, [
-			'fetchDataBegin'      // Started fetching data from the source.
-		, 'fetchDataEnd'        // Done fetching data from the source.
-		, 'getTypeInfo'         // Type information has been retrieved from the source.
-		, 'dataUpdated'         // The data has changed in the source.
-		, 'workBegin'           // The view has started operating on the data.
-		, 'workEnd'             // The view has finished operating on the data.
+	// #toString {{{2
 
-		, 'sortSet'             // When the sort has been set.  Args: (field, direction)
-		, 'filterSet'           // When the filter has been set.  Args: (spec)
-		, 'groupSet'            // When the grouping has been set.  Args: (spec)
-		, 'pivotSet'            // When the pivot config has been set.  Args: (spec)
-		, 'aggregateSet'        // When the aggregate config has been set.  Args: (spec)
+	View.prototype.toString = function () {
+		var self = this;
+		return 'View (' + self.name + ')';
+	};
 
-		, 'sortBegin'           // A sort operation has started.
-		, 'sort'                // Sort information for a row is available.
-		, 'sortEnd'             // A sort operation has finished.
-		, 'filterBegin'         // A filter operation has started.
-		, 'filter'              // Filter information for a row is available.
-		, 'filterEnd'           // A filter operation has finished.
+	// #getDebugTag {{{2
 
-		, 'invalidFilterField'  // A filtered field does not exist in the source data.
-		, 'invalidGroupField'   // A grouped field does not exist in the source data.
-		, 'invalidPivotField'   // A pivotted field does not exist in the source data.
-		, 'invalidSortField'    // A sorted field does not exist in the source data.
-		, 'invalidAggregate'    // An aggregate function is invalid.
-	]);
-
-	// Delegate {{{2
-
-	delegate(View, 'source', ['getUniqueVals', 'convertAll', 'setToolbar']);
+	View.prototype.getDebugTag = function () {
+		var self = this;
+		return 'VIEW {name="' + self.name + '"}';
+	};
 
 	// #_maybeDecode {{{2
 
@@ -41531,7 +45303,7 @@
 		var self = this;
 
 		if (fti.needsDecoding) {
-			debug.info('VIEW // ' + tag, 'Converting data: { field = "%s", type = "%s" }',
+			self.debug(null, 'Converting data: { field = "%s", type = "%s" }',
 				fti.field, fti.type);
 
 			self.source.convertAll(self.data.dataByRowId, fti.field);
@@ -41636,14 +45408,14 @@
 	/**
 	 * Set the sorting spec for the view.
 	 *
-	 * @param {string} col Name of the field to sort by.
-	 *
-	 * @param {string} dir Direction to sort by, either "ASC" or "DESC."
+	 * @param {View~SortSpec} spec
+	 * @param {object} [opts]
 	 */
 
 	View.prototype.setSort = function (spec, opts) {
 		var self = this
-			, args = Array.prototype.slice.call(arguments);
+			, args = Array.prototype.slice.call(arguments)
+			, isDifferent = false;
 
 		if (self.lock.isLocked()) {
 			return self.lock.onUnlock(function () {
@@ -41654,10 +45426,13 @@
 		opts = deepDefaults(opts, {
 			sendEvent: true,
 			dontSendEventTo: [],
-			updateData: true
+			updateData: true,
+			savePrefs: true
 		});
 
-		debug.info('VIEW (' + self.name + ') // SET SORT', 'spec = %O', spec);
+		self.debug('SET SORT', 'spec = %O', spec);
+
+		isDifferent = !underscore.isEqual(self.sortSpec, spec);
 
 		self.sortSpec = spec;
 
@@ -41665,6 +45440,10 @@
 			self.fire('sortSet', {
 				notTo: opts.dontSendEventTo
 			}, spec);
+		}
+
+		if (isDifferent && self.prefs != null && opts.savePrefs) {
+			self.prefs.save();
 		}
 
 		self.clearCache();
@@ -41712,7 +45491,7 @@
 			return cont(false);
 		}
 
-		debug.info('VIEW (' + self.name + ') // SORT', 'Beginning sort: %s', JSON.stringify(self.sortSpec));
+		self.debug('SORT', 'Beginning sort: %s', JSON.stringify(self.sortSpec));
 
 		/**
 		 * Determine the comparison function that should be used to perform the sort operation.
@@ -41820,7 +45599,7 @@
 
 		var unpackBundle = function (orientation) {
 			return function (sorted) {
-				debug.info('VIEW (' + self.name + ') // SORT // UNPACK',
+				self.debug('SORT // UNPACK',
 					'Unpacking bundle of %d sorted chunks in %s orientation',
 					sorted.length, orientation);
 
@@ -41853,6 +45632,8 @@
 
 					// Reorder data and rowvals.
 
+					var rowValIdxMap = {};
+
 					underscore.each(sorted, function (s, newIndex) {
 						// For plain output, fire the "sort" event so that the rows (if the grid table is showing
 						// all of them) can just be shuffled around, and the table doesn't have to be recreated.
@@ -41867,7 +45648,34 @@
 						if (origRowVals != null) {
 							self.data.rowVals[newIndex] = origRowVals[s.oldIndex];
 						}
+
+						rowValIdxMap[s.oldIndex] = newIndex;
 					});
+
+					if (self.data.isGroup || self.data.isPivot) {
+						// Update the groupMetadata tree's use of rowValIndex to correspond to the new ordering of
+						// rowvals.  This means both the `rowValIndex` property of each node in the tree, and the
+						// lookup object.  If this isn't done, then some parts of the UI (like the rowvals in group
+						// and pivot output) will not change to reflect the new ordering.
+
+						var postorder = function (node, depth) {
+							if (node.children == null) {
+								node.rowValIndex = rowValIdxMap[node.rowValIndex];
+								self.data.groupMetadata.lookup.byRowValIndex[node.rowValIndex] = node;
+							}
+							else {
+								underscore.each(node.children, function (child) {
+									postorder(child, depth + 1);
+								});
+								if (depth > 0) {
+									// FIXME Assumes that node.children.length > 0.
+									node.rowValIndex = node.children[underscore.keys(node.children)[0]].rowValIndex;
+								}
+							}
+						};
+
+						postorder(self.data.groupMetadata, 0);
+					}
 
 					// Reorder cell aggregates.
 
@@ -42050,6 +45858,15 @@
 					if (spec.values) {
 						sortAlgorithm = 'pigeonHole';
 					}
+					else if (self.data.groupSpec[spec.groupFieldIndex].fun != null) {
+						// The values that we're sorting came from a function applied to the value of the group
+						// field in the row, e.g. "Day of Week."  Therefore, we can't sort them based on the type
+						// of the group field, e.g. date.
+
+						fti = {
+							type: GROUP_FUNCTION_REGISTRY.get(self.data.groupSpec[spec.groupFieldIndex].fun).sortType
+						};
+					}
 					else {
 						fti = self.typeInfo.get(self.data.groupFields[spec.groupFieldIndex]);
 					}
@@ -42136,6 +45953,15 @@
 					if (spec.values) {
 						sortAlgorithm = 'pigeonHole';
 					}
+					else if (self.data.groupSpec[spec.groupFieldIndex].fun != null) {
+						// The values that we're sorting came from a function applied to the value of the group
+						// field in the row, e.g. "Day of Week."  Therefore, we can't sort them based on the type
+						// of the group field, e.g. date.
+
+						fti = {
+							type: GROUP_FUNCTION_REGISTRY.get(self.data.groupSpec[spec.groupFieldIndex].fun).sortType
+						};
+					}
 					else {
 						fti = self.typeInfo.get(self.data.groupFields[spec.groupFieldIndex]);
 					}
@@ -42198,6 +46024,15 @@
 
 					if (spec.values) {
 						sortAlgorithm = 'pigeonHole';
+					}
+					else if (self.data.pivotSpec[spec.pivotFieldIndex].fun != null) {
+						// The values that we're sorting came from a function applied to the value of the pivot
+						// field in the row, e.g. "Day of Week."  Therefore, we can't sort them based on the type
+						// of the pivot field, e.g. date.
+
+						fti = {
+							type: GROUP_FUNCTION_REGISTRY.get(self.data.pivotSpec[spec.pivotFieldIndex].fun).sortType
+						};
 					}
 					else {
 						fti = self.typeInfo.get(self.data.pivotFields[spec.pivotFieldIndex]);
@@ -42301,9 +46136,35 @@
 					return next(false);
 				}
 
+				// NOTE We're intentionally making the sort stable only when sorting ascending.
+				//
+				// When sorting rowvals/colvals:
+				//
+				// Since we're always starting from the same set of data (which is sorted asc by each element
+				// of the rowval/colval in turn), no matter which direction we sort, this has the effect of
+				// making the following work:
+				//
+				//   X,Y             X,Y            X,Y
+				//  -----           -----          -----
+				//   A,A             C,C            A,A
+				//   A,B             C,B            A,B
+				//   A,C             C,A            A,C
+				//   B,A  ========>  B,C  =======>  B,A
+				//   B,B   X, DESC   B,B   X, ASC   B,B
+				//   B,C  ========>  B,A  =======>  B,C
+				//   C,A             A,C            C,A
+				//   C,B             A,B            C,B
+				//   C,C             A,A            C,C
+				//
+				// This magickally does the expected thing, in every scenario.  Fields other than the one
+				// sorted by (in the example above, Y) end up sorted in the same direction, left to right.
+				//
+				// FIXME This will need to be adjusted when we support multiple sorts.  Both directions should
+				// be stable when we do that, or else it won't work as expected.
+
 				comparison = function (a, b) {
 					if (spec.dir.toUpperCase() === 'ASC') {
-						return cmp(a.sortSource, b.sortSource) < 0;
+						return cmp(a.sortSource, b.sortSource) <= 0;
 					}
 					else if (spec.dir.toUpperCase() === 'DESC') {
 						return cmp(a.sortSource, b.sortSource) > 0;
@@ -42325,7 +46186,7 @@
 
 			var finish = makeFinishCb(unpackBundle(orientation), next);
 
-			debug.info('VIEW (' + self.name + ') // SORT', 'Performing sort using %s algorithm', sortAlgorithm);
+			self.debug('SORT', 'Performing sort using %s algorithm', sortAlgorithm);
 
 			switch (sortAlgorithm) {
 			case 'mergeSort':
@@ -42394,7 +46255,8 @@
 
 	View.prototype.setFilter = function (spec, progress, opts) {
 		var self = this
-			, args = Array.prototype.slice.call(arguments);
+			, args = Array.prototype.slice.call(arguments)
+			, isDifferent = false;
 
 		opts = deepCopy(opts) || {};
 
@@ -42407,10 +46269,13 @@
 		opts = deepDefaults(opts, {
 			sendEvent: true,
 			dontSendEventTo: [],
-			updateData: true
+			updateData: true,
+			savePrefs: true
 		});
 
-		debug.info('VIEW (' + self.name + ') // SET FILTER', 'spec = %O ; options = %O', spec, opts);
+		self.debug('SET FILTER', 'spec = %O ; options = %O', spec, opts);
+
+		isDifferent = !underscore.isEqual(self.filterSpec, spec);
 
 		if (self.filterSpec != null && spec == null) {
 			self.wasPreviouslyFiltered = true;
@@ -42440,6 +46305,10 @@
 			self.fire('filterSet', {
 				notTo: opts.dontSendEventTo
 			}, spec);
+		}
+
+		if (isDifferent && self.prefs != null && opts.savePrefs) {
+			self.prefs.save();
 		}
 
 		self.clearCache();
@@ -42515,21 +46384,35 @@
 
 		// Make sure that each column that we're filtering has been type decoded, if necessary.
 
-		underscore.each(underscore.keys(self.filterSpec), function (filterField) {
-			var fti = self.typeInfo.get(filterField);
+		underscore.each(self.filterSpec, function (fieldSpec, field) {
+			var fti = self.typeInfo.get(field);
 
 			// Check to make sure we have enough information about the type of the field that the user wants
 			// us to filter.
 
 			if (fti === undefined) {
-				log.error('Filter field does not exist in the source: ' + filterField);
-				self.fire('invalidFilterField', null, filterField);
-				delete self.filterSpec[filterField];
+				log.error('Filter field "' + field + '" does not exist in the source');
+				self.fire('invalidFilterField', null, field);
+				delete self.filterSpec[field];
 				return;
 			}
 
 			if (fti.type === undefined) {
-				throw new Error('Unable to filter field "' + filterField + '" - type is not provided');
+				log.error('Unable to filter field "' + field + '", type is unknown');
+				self.fire('invalidFilterField', null, field);
+				delete self.filterSpec[field];
+				return;
+			}
+
+			// For dates and datetimes, if the data is stored in moment objects, convert filters serialized
+			// as strings into moment objects before continuing.
+
+			if (['date', 'datetime'].indexOf(fti.type) >= 0 && fti.internalType === 'moment') {
+				underscore.each(fieldSpec, function (val, op) {
+					if (typeof val === 'string') {
+						fieldSpec[op] = moment(val);
+					}
+				});
 			}
 
 			self._maybeDecode('FILTER', fti);
@@ -42549,8 +46432,8 @@
 				return false;
 			}
 
-			var isMoment = window.moment && window.moment.isMoment(datum);
-			var isNumeral = window.numeral && window.numeral.isNumeral(datum);
+			var isMoment = moment.isMoment(datum);
+			var isNumeral = numeral.isNumeral(datum);
 			var isString = typeof datum === 'string';
 			var isNumber = typeof datum === 'number';
 
@@ -42608,7 +46491,7 @@
 				}
 
 				var operand = fltr[operator];
-				//debug.info('DATA VIEW // FILTER', 'field = ' + field + ' ; Datum = ' + datum + ' ; Operator = ' + operator + ' ; Operand = ' + operand);
+				//self.debug('FILTER', 'field = ' + field + ' ; Datum = ' + datum + ' ; Operator = ' + operator + ' ; Operand = ' + operand);
 
 				if (pred[operator] !== undefined) {
 					if (underscore.isArray(operand)) {
@@ -42692,7 +46575,7 @@
 		var doFilter = function () {
 			var i;
 
-			//debug.info('VIEW (' + self.name + ') // FILTER',
+			//self.debug('FILTER',
 			//					 'Filtering rows ' + i0.val + ' through ' + (i0.val + i_step));
 
 			for (i = i0.val; i < self.data.data.length && i < i0.val + i_step; i += 1) {
@@ -42767,7 +46650,8 @@
 
 	View.prototype.setGroup = function (spec, opts, cont) {
 		var self = this
-			, args = Array.prototype.slice.call(arguments);
+			, args = Array.prototype.slice.call(arguments)
+			, isDifferent = false;
 
 		if (self.lock.isLocked()) {
 			return self.lock.onUnlock(function () {
@@ -42778,14 +46662,30 @@
 		opts = deepDefaults(opts, {
 			sendEvent: true,
 			dontSendEventTo: [],
-			updateData: true
+			updateData: true,
+			savePrefs: true
 		});
 
-		debug.info('VIEW (' + self.name + ') // SET GROUP', 'spec = %O', spec);
+		self.debug('SET GROUP', 'spec = %O', spec);
 
 		if (spec == null && self.pivotSpec != null) {
 			log.warn('VIEW (' + self.name + ') // SET GROUP', 'Having a pivot without a group is not allowed');
 			self.clearPivot(opts);
+		}
+
+		if (spec != null) {
+			if (!underscore.isArray(spec.fieldNames)) {
+				log.warn('VIEW (' + self.name + ') // SET GROUP', '`spec.fieldNames` is not an array');
+				spec.fieldNames = [];
+			}
+
+			// Convert the `fieldNames` property elements from strings to objects.
+
+			for (var i = 0; i < spec.fieldNames.length; i += 1) {
+				if (typeof spec.fieldNames[i] === 'string') {
+					spec.fieldNames[i] = { field: spec.fieldNames[i] };
+				}
+			}
 		}
 
 		/*
@@ -42816,12 +46716,18 @@
 		}
 		*/
 
+		isDifferent = !underscore.isEqual(self.groupSpec, spec);
+
 		self.groupSpec = spec;
 
 		if (opts.sendEvent) {
 			self.fire('groupSet', {
 				notTo: opts.dontSendEventTo
 			}, spec);
+		}
+
+		if (isDifferent && self.prefs != null && opts.savePrefs) {
+			self.prefs.save();
 		}
 
 		self.clearCache();
@@ -42891,6 +46797,10 @@
 
 	/**
 	 * @typedef {object} metadataNode
+	 * Node within the tree used to store grouping metadata for detailed group output.  This structure
+	 * drives the display and expand/collapse behavior of the UI.  The root is a fake metadataNode (does
+	 * not correspond to anything actually in the data) with `id = 0` and all toplevel groups are
+	 * children of the root.  Every path through the tree represents a rowVal.
 	 *
 	 * @property {number} id
 	 * A unique identifier for this node.
@@ -42910,6 +46820,18 @@
 	 * @property {Array} rows
 	 * All the rows in the rowVal this rowValElt completes.  Only in leaf nodes.
 	 *
+	 * @property {string} rowValElt
+	 * The part of the current rowVal represented by the node at the current depth in the tree.
+	 *
+	 * ```
+	 * rowVals = [[A1,B1],[A1,B2],[A2,B1],[A2,B2]]
+	 * tree = <ORIGIN>
+	 *       /        \
+	 *      A1        A2 <- rowValElt = A2
+	 *     /  \      /  \
+	 *    B1  B2    B1  B2 <- rowValElt = B2
+	 * ```
+	 *
 	 * @property {number} rowValIndex
 	 * What rowVal this rowValElt completes. Only in leaf nodes.  Example:
 	 *
@@ -42922,6 +46844,14 @@
 	 *    B1  B2    B1  B2
 	 *    0   1     2   3   <- rowValIndex
 	 * ```
+	 *
+	 * @property {object} rowValCell
+	 *
+	 * @property {string} groupField
+	 * Name of the field that we're grouping by at this level.
+	 *
+	 * @property {View~GroupSpecElt} groupSpec
+	 * The full group spec for the grouping done at this level.
 	 */
 
 	/**
@@ -42931,7 +46861,7 @@
 
 	View.prototype.group = function () {
 		var self = this
-			, groupFields = []
+			, finalGroupSpec = []
 			, newData
 			, rowVals;
 
@@ -42952,25 +46882,25 @@
 		// Go through every group field and make sure it exists in the source.  If it doesn't, we use an
 		// event to notify the user interface about it so a warning can be shown.
 
-		underscore.each(self.groupSpec.fieldNames, function (field, fieldIdx) {
-			var fti = self.typeInfo.get(field);
+		underscore.each(self.groupSpec.fieldNames, function (fieldObj) {
+			var fti = self.typeInfo.get(fieldObj.field);
 			if (fti == null) {
-				log.error('Group field does not exist in the source: ' + field);
-				self.fire('invalidGroupField', null, field);
+				log.error('Group field does not exist in the source: ' + fieldObj.field);
+				self.fire('invalidGroupField', null, fieldObj.field);
 			}
 			else if (fti.type == null) {
 				log.error('Unable to group by field "%s": type is undefined');
 			}
 			else {
 				self._maybeDecode('GROUP', fti);
-				groupFields.push(field);
+				finalGroupSpec.push(fieldObj);
 			}
 		});
 
 		// It's possible now that we've eliminated *all* the group fields because they're invalid; if
 		// that's the case, we just abort as if no grouping was requested at all.
 
-		if (groupFields.length === 0) {
+		if (finalGroupSpec.length === 0) {
 			return false;
 		}
 
@@ -42983,7 +46913,7 @@
 
 		var origKeys = []; // groupFieldIndex[] → natRep → value
 
-		// buildRowVals(groupFields) => rowVals
+		// buildRowVals {{{3
 		//
 		//   Create the list of the native representations of all combinations of the values of the group
 		//   fields.  Here's a simple example with strings, where the natrep transform is identity.
@@ -42999,25 +46929,39 @@
 		//   As a side effect, the `origKeys[groupFieldIndex]` object is updated with how to reverse the
 		//   natrep transform.  This will be used later.
 
-		var buildRowVals = function (groupFields, addRowVals) {
+		var buildRowVals = function (addRowVals) {
 			var rowVals = []
 				, rowVal
 				, row
 				, rowIndex
-				, groupField
+				, groupSpecElt
 				, groupFieldIndex
+				, cell
 				, value
-				, natRep;
+				, natRep
+				, groupFun
+				, groupFunResult;
 
 			for (rowIndex = 0; rowIndex < self.data.data.length; rowIndex += 1) {
 				row = self.data.data[rowIndex];
 				rowVal = [];
-				for (groupFieldIndex = 0; groupFieldIndex < groupFields.length; groupFieldIndex += 1) {
-					groupField = groupFields[groupFieldIndex];
-					value = row.rowData[groupField].value;
-					natRep = getNatRep(value);
-					origKeys[groupFieldIndex][natRep] = value;
+				for (groupFieldIndex = 0; groupFieldIndex < finalGroupSpec.length; groupFieldIndex += 1) {
+					groupSpecElt = finalGroupSpec[groupFieldIndex];
+					cell = row.rowData[groupSpecElt.field];
+					value = cell.value;
+					if (groupSpecElt.fun == null) {
+						natRep = getNatRep(value);
+						origKeys[groupFieldIndex][natRep] = value;
+					}
+					else {
+						groupFun = GROUP_FUNCTION_REGISTRY.get(groupSpecElt.fun);
+						groupFunResult = groupFun.applyValueFun(value);
+						natRep = getNatRep(groupFunResult);
+						origKeys[groupFieldIndex][natRep] = groupFunResult;
+					}
 					rowVal[groupFieldIndex] = natRep;
+					// Cache the natRep in the cell for improved performance in buildData().
+					setProp(natRep, cell, 'natRep', 'group', groupFieldIndex);
 				}
 				if (underscore.findIndex(rowVals, function (x) {
 					return arrayEqual(rowVal, x);
@@ -43030,9 +46974,9 @@
 				for (var arvIndex = 0; arvIndex < addRowVals.length; arvIndex += 1) {
 					rowVal = addRowVals[arvIndex];
 
-					if (rowVal.length != groupFields.length) {
+					if (rowVal.length != finalGroupSpec.length) {
 						log.error('Unable to add rowVal %s when grouping by %s: the lengths must be the same',
-							JSON.stringify(rowVal), JSON.stringify(groupFields));
+							JSON.stringify(rowVal), JSON.stringify(finalGroupSpec));
 						continue;
 					}
 
@@ -43058,13 +47002,17 @@
 			return rowVals;
 		};
 
+		// buildData {{{3
+
 		var buildData = function (data, rowVals) {
 			var rowVal
 				, rowValIndex
 				, metadataLeaf
 				, row
 				, rowIndex
-				, groupFieldIndex;
+				, groupSpecElt
+				, groupFieldIndex
+				;
 
 			var result = new Array(rowVals.length);
 			var metadataTree = {
@@ -43103,10 +47051,12 @@
 
 			for (rowIndex = 0; rowIndex < data.length; rowIndex += 1) {
 				row = data[rowIndex];
-				rowVal = new Array(groupFields.length);
+				rowVal = new Array(finalGroupSpec.length);
 
-				for (groupFieldIndex = 0; groupFieldIndex < groupFields.length; groupFieldIndex += 1) {
-					rowVal[groupFieldIndex] = getNatRep(row.rowData[groupFields[groupFieldIndex]].value);
+				for (groupFieldIndex = 0; groupFieldIndex < finalGroupSpec.length; groupFieldIndex += 1) {
+					groupSpecElt = finalGroupSpec[groupFieldIndex];
+					// Use the cached natRep from the cell to quickly build the path to the metadata node.
+					rowVal[groupFieldIndex] = row.rowData[groupSpecElt.field].natRep.group[groupFieldIndex];
 				}
 
 				metadataLeaf = getProp(metadataTree, 'children', interleaveWith(rowVal, 'children'));
@@ -43142,6 +47092,7 @@
 						node.rows = node.rows.concat(child.rows);
 					});
 					if (depth > 0) {
+						// FIXME Assumes that node.children.length > 0.
 						node.rowValIndex = node.children[underscore.keys(node.children)[0]].rowValIndex;
 						node.rowValElt = rowVals[node.rowValIndex][depth - 1];
 					}
@@ -43149,7 +47100,8 @@
 
 				if (depth > 0) {
 					node.groupFieldIndex = depth - 1;
-					node.groupField = groupFields[node.groupFieldIndex];
+					node.groupField = finalGroupSpec[node.groupFieldIndex].field;
+					node.groupSpec = finalGroupSpec[node.groupFieldIndex];
 					if (node.rows != null && node.rows.length > 0) {
 						node.rowValCell = node.rows[0].rowData[node.groupField];
 					}
@@ -43164,13 +47116,15 @@
 			};
 		};
 
+		// convertRowVals {{{3
+
 		var convertRowVals = function (rowVals) {
 			var result = [];
 
 			for (var rowValIndex = 0; rowValIndex < rowVals.length; rowValIndex += 1) {
 				var rowVal = rowVals[rowValIndex];
 				result[rowValIndex] = [];
-				for (var groupFieldIndex = 0; groupFieldIndex < groupFields.length; groupFieldIndex += 1) {
+				for (var groupFieldIndex = 0; groupFieldIndex < finalGroupSpec.length; groupFieldIndex += 1) {
 					result[rowValIndex][groupFieldIndex] = origKeys[groupFieldIndex][rowVal[groupFieldIndex]];
 				}
 			}
@@ -43178,24 +47132,29 @@
 			return result;
 		};
 
-		for (var groupFieldIndex = 0; groupFieldIndex < groupFields.length; groupFieldIndex += 1) {
+		// }}}3
+
+		for (var groupFieldIndex = 0; groupFieldIndex < finalGroupSpec.length; groupFieldIndex += 1) {
 			origKeys[groupFieldIndex] = {};
 		}
 
-		rowVals = buildRowVals(groupFields, self.groupSpec.addRowVals);
+		rowVals = buildRowVals(self.groupSpec.addRowVals);
 		newData = buildData(self.data.data, rowVals);
 		rowVals = convertRowVals(rowVals);
 
-		debug.info('VIEW (' + self.name + ') // GROUP', 'Group Fields: %O', groupFields);
-		debug.info('VIEW (' + self.name + ') // GROUP', 'Row Vals: %O', rowVals);
-		debug.info('VIEW (' + self.name + ') // GROUP', 'New Data: %O', newData.data);
+		self.debug('GROUP', 'Group Spec: %O', finalGroupSpec);
+		self.debug('GROUP', 'Row Vals: %O', rowVals);
+		self.debug('GROUP', 'New Data: %O', newData.data);
 
 		self.data.isPlain = false;
 		self.data.isGroup = true;
-		self.data.groupFields = groupFields;
+		self.data.groupFields = underscore.pluck(finalGroupSpec, 'field');
+		self.data.groupSpec = finalGroupSpec;
 		self.data.rowVals = rowVals;
 		self.data.data = newData.data;
 		self.data.groupMetadata = newData.metadata;
+
+		self.debug('GROUP', 'Final Data: %O', self.data);
 
 		return true;
 	};
@@ -43222,7 +47181,8 @@
 
 	View.prototype.setPivot = function (spec, opts) {
 		var self = this
-			, args = Array.prototype.slice.call(arguments);
+			, args = Array.prototype.slice.call(arguments)
+			, isDifferent = false;
 
 		if (self.lock.isLocked()) {
 			return self.lock.onUnlock(function () {
@@ -43233,15 +47193,31 @@
 		opts = deepDefaults(opts, {
 			sendEvent: true,
 			dontSendEventTo: [],
-			updateData: true
+			updateData: true,
+			savePrefs: true
 		});
 
-		debug.info('VIEW (' + self.name + ') // SET PIVOT', 'spec = %O', spec);
+		self.debug('SET PIVOT', 'spec = %O', spec);
 
 		if (self.groupSpec == null && spec != null) {
 			log.warn('VIEW (' + self.name + ') // SET PIVOT', 'Having a pivot without a group is not allowed');
 			self.clearPivot(opts);
 			return false;
+		}
+
+		if (spec != null) {
+			if (!underscore.isArray(spec.fieldNames)) {
+				log.warn('VIEW (' + self.name + ') // SET PIVOT', '`spec.fieldNames` is not an array');
+				spec.fieldNames = [];
+			}
+
+			// Convert the `fieldNames` property elements from strings to objects.
+
+			for (var i = 0; i < spec.fieldNames.length; i += 1) {
+				if (typeof spec.fieldNames[i] === 'string') {
+					spec.fieldNames[i] = { field: spec.fieldNames[i] };
+				}
+			}
 		}
 
 		/*
@@ -43272,12 +47248,18 @@
 		}
 		*/
 
+		isDifferent = !underscore.isEqual(self.pivotSpec, spec);
+
 		self.pivotSpec = spec;
 
 		if (opts.sendEvent) {
 			self.fire('pivotSet', {
 				notTo: opts.dontSendEventTo
 			}, spec);
+		}
+
+		if (isDifferent && self.prefs != null && opts.savePrefs) {
+			self.prefs.save();
 		}
 
 		self.clearCache();
@@ -43454,12 +47436,12 @@
 
 		colValsTree = buildColValsTree(pivotFields);
 		colVals = buildColVals(colValsTree);
-		self.data.data = buildData(self.data.data, colVals);
+		self.data.data = buildData(self.data.data);
 
-		debug.info('VIEW (' + self.name + ') // PIVOT', 'Pivot Fields: %O', pivotFields);
-		debug.info('VIEW (' + self.name + ') // PIVOT', 'Col Vals Tree: %O', colValsTree);
-		debug.info('VIEW (' + self.name + ') // PIVOT', 'Col Vals: %O', colVals);
-		debug.info('VIEW (' + self.name + ') // PIVOT', 'New Data: %O', self.data);
+		self.debug('PIVOT', 'Pivot Fields: %O', pivotFields);
+		self.debug('PIVOT', 'Col Vals Tree: %O', colValsTree);
+		self.debug('PIVOT', 'Col Vals: %O', colVals);
+		self.debug('PIVOT', 'New Data: %O', self.data);
 
 		self.data.isPlain = false;
 		self.data.isGroup = false;
@@ -43474,8 +47456,9 @@
 
 	View.prototype.pivot = function () {
 		var self = this
-			, pivotFields = [] // Array of field names to pivot by.
+			, finalPivotSpec = [] // Array of field names to pivot by.
 			, colVals     // Array of all possible column value combinations.
+			, newData
 		;
 
 		// FIXME Allow pivot without group.
@@ -43498,38 +47481,42 @@
 			return false;
 		}
 
-		// Go through every pivot field and make sure it exists in the source.
+		// Go through every group field and make sure it exists in the source.  If it doesn't, we use an
+		// event to notify the user interface about it so a warning can be shown.
 
-		underscore.each(self.pivotSpec.fieldNames, function (field, fieldIdx) {
-			var fti = self.typeInfo.get(field);
+		underscore.each(self.pivotSpec.fieldNames, function (fieldObj) {
+			var fti = self.typeInfo.get(fieldObj.field);
 			if (fti == null) {
-				log.error('Pivot field does not exist in the source: ' + field);
-				self.fire('invalidPivotField', null, field);
+				log.error('Pivot field does not exist in the source: ' + fieldObj.field);
+				self.fire('invalidPivotField', null, fieldObj.field);
 			}
 			else if (fti.type == null) {
 				log.error('Unable to pivot by field "%s": type is undefined');
 			}
 			else {
 				self._maybeDecode('PIVOT', fti);
-				pivotFields.push(field);
+				finalPivotSpec.push(fieldObj);
 			}
 		});
 
 		// It's possible now that we've eliminated *all* the pivot fields because they're invalid; if
 		// that's the case, we just abort as if no pivotting was requested at all.
 
-		if (pivotFields.length === 0) {
+		if (finalPivotSpec.length === 0) {
 			return false;
 		}
 
 		var origKeys = [];
 
-		var buildColVals = function (pivotFields, addColVals) {
+		// buildColVals {{{3
+
+		var buildColVals = function (addColVals) {
 			var colVal
 				, pivotFieldIndex
-				, pivotField
+				, pivotSpecElt
 				, value
 				, natRep
+				, groupFun
 				, groupIndex
 				, group
 				, row
@@ -43542,11 +47529,19 @@
 				for (rowIndex = 0; rowIndex < group.length; rowIndex += 1) {
 					row = group[rowIndex];
 					colVal = [];
-					for (pivotFieldIndex = 0; pivotFieldIndex < pivotFields.length; pivotFieldIndex += 1) {
-						pivotField = pivotFields[pivotFieldIndex];
-						value = row.rowData[pivotField].value;
-						natRep = getNatRep(value);
-						origKeys[pivotFieldIndex][natRep] = value;
+					for (pivotFieldIndex = 0; pivotFieldIndex < finalPivotSpec.length; pivotFieldIndex += 1) {
+						pivotSpecElt = finalPivotSpec[pivotFieldIndex];
+						value = row.rowData[pivotSpecElt.field].value;
+						if (pivotSpecElt.fun == null) {
+							natRep = getNatRep(value);
+							origKeys[pivotFieldIndex][natRep] = value;
+						}
+						else {
+							groupFun = GROUP_FUNCTION_REGISTRY.get(pivotSpecElt.fun);
+							natRep = groupFun.applyValueFun(value);
+							origKeys[pivotFieldIndex][natRep] = natRep;
+						}
+						setProp(natRep, row.rowData[pivotSpecElt.field], 'natRep', 'pivot', pivotFieldIndex);
 						colVal[pivotFieldIndex] = natRep;
 					}
 					if (underscore.findIndex(colVals, function (x) {
@@ -43561,9 +47556,9 @@
 				for (acvIndex = 0; acvIndex < addColVals.length; acvIndex += 1) {
 					colVal = addColVals[acvIndex];
 
-					if (colVal.length != pivotFields.length) {
+					if (colVal.length != finalPivotSpec.length) {
 						log.error('Unable to add colVal %s when pivotting by %s: the lengths must be the same',
-							JSON.stringify(colVal), JSON.stringify(pivotFields));
+							JSON.stringify(colVal), JSON.stringify(finalPivotSpec));
 						continue;
 					}
 
@@ -43590,6 +47585,8 @@
 
 		};
 
+		// buildData {{{3
+
 		var buildData = function (data) {
 			var result = [];
 
@@ -43598,11 +47595,9 @@
 				underscore.each(colVals, function (colVal) {
 					var tmp = [];
 					underscore.each(groupedRows, function (row) {
-						if (underscore.every(colVal, function (colValElt, colValNum) {
-							var pivotField = pivotFields[colValNum];
-							var value = row.rowData[pivotField].value;
-							var natRep = getNatRep(value);
-							return colValElt === natRep;
+						if (underscore.every(colVal, function (colValElt, colValIndex) {
+							var pivotSpecElt = finalPivotSpec[colValIndex];
+							return colValElt === row.rowData[pivotSpecElt.field].natRep.pivot[colValIndex];
 						})) {
 							tmp.push(row);
 						}
@@ -43615,13 +47610,15 @@
 			return result;
 		};
 
+		// convertColVals {{{3
+
 		var convertColVals = function (colVals) {
 			var result = [];
 
 			for (var colValIndex = 0; colValIndex < colVals.length; colValIndex += 1) {
 				var colVal = colVals[colValIndex];
 				result[colValIndex] = [];
-				for (var pivotFieldIndex = 0; pivotFieldIndex < pivotFields.length; pivotFieldIndex += 1) {
+				for (var pivotFieldIndex = 0; pivotFieldIndex < finalPivotSpec.length; pivotFieldIndex += 1) {
 					result[colValIndex][pivotFieldIndex] = origKeys[pivotFieldIndex][colVal[pivotFieldIndex]];
 				}
 			}
@@ -43629,24 +47626,30 @@
 			return result;
 		};
 
-		for (var pivotFieldIndex = 0; pivotFieldIndex < pivotFields.length; pivotFieldIndex += 1) {
+		// }}}3
+
+		for (var pivotFieldIndex = 0; pivotFieldIndex < finalPivotSpec.length; pivotFieldIndex += 1) {
 			origKeys[pivotFieldIndex] = {};
 		}
 
-		colVals = buildColVals(pivotFields, self.pivotSpec.addColVals);
-		self.data.data = buildData(self.data.data, colVals);
+		colVals = buildColVals(self.pivotSpec.addColVals);
+		newData = buildData(self.data.data);
 		colVals = convertColVals(colVals);
 
-		debug.info('VIEW (' + self.name + ') // PIVOT', 'Pivot Fields: %O', pivotFields);
-		debug.info('VIEW (' + self.name + ') // PIVOT', 'Orig Keys: %O', origKeys);
-		debug.info('VIEW (' + self.name + ') // PIVOT', 'Col Vals: %O', colVals);
-		debug.info('VIEW (' + self.name + ') // PIVOT', 'New Data: %O', self.data);
+		self.debug('PIVOT', 'Pivot Spec: %O', finalPivotSpec);
+		self.debug('PIVOT', 'Orig Keys: %O', origKeys);
+		self.debug('PIVOT', 'Col Vals: %O', colVals);
+		self.debug('PIVOT', 'New Data: %O', newData);
 
 		self.data.isPlain = false;
 		self.data.isGroup = false;
 		self.data.isPivot = true;
-		self.data.pivotFields = pivotFields;
+		self.data.pivotFields = underscore.pluck(finalPivotSpec, 'field');
+		self.data.pivotSpec = finalPivotSpec;
 		self.data.colVals = colVals;
+		self.data.data = newData;
+
+		self.debug('GROUP', 'Final Data: %O', self.data);
 
 		return true;
 	};
@@ -43673,7 +47676,8 @@
 
 	View.prototype.setAggregate = function (spec, opts) {
 		var self = this
-			, args = Array.prototype.slice.call(arguments);
+			, args = Array.prototype.slice.call(arguments)
+			, isDifferent = false;
 
 		var shouldGraph = {
 			group: [],
@@ -43689,10 +47693,11 @@
 		opts = deepDefaults(opts, {
 			sendEvent: true,
 			dontSendEventTo: [],
-			updateData: true
+			updateData: true,
+			savePrefs: true
 		});
 
-		debug.info('VIEW (' + self.name + ') // SET AGGREGATE', 'spec = %O ; options = %O', spec, opts);
+		self.debug('SET AGGREGATE', 'spec = %O ; options = %O', spec, opts);
 
 		/*
 		if (spec == null || self.aggregateSpec == null) {
@@ -43701,6 +47706,8 @@
 			}]]);
 		}
 		*/
+
+		isDifferent = !underscore.isEqual(self.aggregateSpec, spec);
 
 		if (spec == null) {
 			self.aggregateSpec = null;
@@ -43760,6 +47767,10 @@
 			}, spec, shouldGraph);
 		}
 
+		if (isDifferent && self.prefs != null && opts.savePrefs) {
+			self.prefs.save();
+		}
+
 		self.clearCache();
 
 		if (!opts.updateData) {
@@ -43801,7 +47812,7 @@
 		}
 
 		underscore.each(['group', 'pivot', 'cell', 'all'], function (what) {
-			debug.info('VIEW // AGGREGATE', 'Computing %s aggregate functions: %s',
+			self.debug('AGGREGATE', 'Computing %s aggregate functions: %s',
 				what, underscore.pluck(getProp(self, 'aggregateSpec', what), 'fun').join(', '));
 		});
 
@@ -43850,11 +47861,11 @@
 				var aggResult = aggInfo.instance.calculate(underscore.flatten(self.data.data[rowValIdx]));
 				groupResults[aggNum][rowValIdx] = aggResult;
 				if (aggInfo.debug) {
-					debug.info('VIEW // AGGREGATE', 'Group aggregate [%d] (%s) : Group [%s] = %s',
+					self.debug('AGGREGATE', 'Group aggregate [%d] (%s) : Group [%s] = %s',
 						aggNum,
 						info.group[aggNum].instance.name + (info.group[aggNum].name ? ' -> ' + info.group[aggNum].name : ''),
 						rowVal.join(', '),
-						JSON.stringify(aggResult));
+						isElement(aggResult) ? getElement(aggResult).innerText : JSON.stringify(aggResult));
 				}
 			});
 
@@ -43869,12 +47880,12 @@
 						var aggResult = aggInfo.instance.calculate(self.data.data[rowValIdx][colValIdx]);
 						cellResults[aggNum][rowValIdx][colValIdx] = aggResult;
 						if (aggInfo.debug) {
-							debug.info('VIEW // AGGREGATE', 'Cell aggregate [%d] (%s) : Cell [%s ; %s] = %s',
+							self.debug('AGGREGATE', 'Cell aggregate [%d] (%s) : Cell [%s ; %s] = %s',
 								aggNum,
 								info.cell[aggNum].instance.name + (info.cell[aggNum].name ? ' -> ' + info.cell[aggNum].name : ''),
 								rowVal.join(', '),
 								colVal.join(', '),
-								JSON.stringify(aggResult));
+								isElement(aggResult) ? getElement(aggResult).innerText : JSON.stringify(aggResult));
 						}
 					});
 				});
@@ -43889,11 +47900,11 @@
 					var aggResult = aggInfo.instance.calculate(underscore.flatten(underscore.pluck(self.data.data, colValIdx)));
 					pivotResults[aggNum][colValIdx] = aggResult;
 					if (aggInfo.debug) {
-						debug.info('VIEW // AGGREGATE', 'Pivot aggregate [%d] (%s) : Col Val [%s] = %s',
+						self.debug('AGGREGATE', 'Pivot aggregate [%d] (%s) : Col Val [%s] = %s',
 							aggNum,
 							info.pivot[aggNum].instance.name + (info.pivot[aggNum].name ? ' -> ' + info.pivot[aggNum].name : ''),
 							colVal.join(', '),
-							JSON.stringify(aggResult));
+							isElement(aggResult) ? getElement(aggResult).innerText : JSON.stringify(aggResult));
 					}
 				});
 			});
@@ -43904,7 +47915,7 @@
 				var aggResult = aggInfo.instance.calculate(underscore.flatten(self.data.data));
 				allResults[aggNum] = aggResult;
 				if (aggInfo.debug) {
-					debug.info('VIEW // AGGREGATE', 'All aggregate [%d] (%s) = %s',
+					self.debug('AGGREGATE', 'All aggregate [%d] (%s) = %s',
 						aggNum,
 						info.all[aggNum].instance.name + (info.all[aggNum].name ? ' -> ' + info.all[aggNum].name : ''),
 						JSON.stringify(aggResult));
@@ -43931,9 +47942,12 @@
 	 * Retrieves a fresh copy of the data for this view from the data source.
 	 *
 	 * @param {function} cont What to do next.
+	 *
+	 * @param {string} reason
+	 * Why are you calling this function?  (Used to save debugging information for onUnlock handlers.)
 	 */
 
-	View.prototype.getData = function (cont) {
+	View.prototype.getData = function (cont, reason) {
 		var self = this;
 
 		if (cont != null && typeof cont !== 'function') {
@@ -43943,27 +47957,36 @@
 		cont = cont || I;
 
 		if (self.lock.isLocked()) {
+			var lockMsg = 'Waiting to get data';
+			if (reason != null) {
+				lockMsg += ': ' + reason;
+			}
 			return self.lock.onUnlock(function () {
 				self.getData(cont);
-			}, 'Waiting to get data');
+			}, lockMsg);
+		}
+		else {
+			var lockMsg = 'Getting data';
+			if (reason != null) {
+				lockMsg += ': ' + reason;
+			}
+			self.debug(lockMsg);
 		}
 
 		if (self.data !== undefined) {
-			debug.info('VIEW (' + self.name + ')', 'Got cached data: %O', self.data);
+			self.debug(null, 'Got cached data: %O', self.data);
 			if (typeof cont === 'function') {
 				return cont(true, self.data);
 			}
 		}
 
 		var fail = function () {
-			self.fire('fetchDataEnd');
 			self.lock.unlock();
 			return cont(false);
 		};
 
 		self.lock.lock();
 
-		self.fire('fetchDataBegin');
 		return self.source.getData(function (ok, data) {
 			if (!ok) {
 				return fail();
@@ -43974,7 +47997,6 @@
 					return fail();
 				}
 
-				self.fire('fetchDataEnd');
 				self.fire('workBegin');
 
 				var ops = {
@@ -44031,15 +48053,18 @@
 								workEndObj.numPivots = self.data.colVals.length;
 							}
 
-							if (self.prefs != null) {
-								self.prefs.save();
-							}
+							// FIXME Why does this need to save prefs?  They should be saved when the configuration
+							// changes, not when we retrieve data.
+							//
+							// if (self.prefs != null) {
+							// 	self.prefs.save();
+							// }
 
 							self.lastOps = ops;
 							self.fire('workEnd', null, workEndObj, ops);
 
 							self.lock.unlock();
-							debug.info('VIEW (' + self.name + ')', 'Got new data: %O', self.data);
+							self.debug(null, 'Got new data: %O', self.data);
 							if (typeof cont === 'function') {
 								return cont(true, self.data);
 							}
@@ -44086,7 +48111,7 @@
 		self.data = undefined;
 		self.typeInfo = undefined;
 
-		debug.info('VIEW (' + self.name + ')', 'Cleared cache');
+		self.debug(null, 'Cleared cache');
 	};
 
 	// #clearSourceData {{{2
@@ -44101,7 +48126,16 @@
 			self.source.clearSourceData();
 		}
 
-		debug.info('VIEW (' + self.name + ')', 'Cleared source data');
+		self.debug(null, 'Cleared source data');
+	};
+
+	// #refresh {{{2
+
+	View.prototype.refresh = function () {
+		var self = this;
+
+		self.debug(null, 'Refreshing...');
+		self.source.refresh();
 	};
 
 	// #reset {{{2
@@ -44117,30 +48151,21 @@
 		opts = deepDefaults(opts, {
 			sendEvent: true,
 			dontSendEventTo: [],
-			updateData: true
+			updateData: true,
+			savePrefs: true
 		});
 
-		debug.info('VIEW (' + self.name + ')', 'RESET!');
-
-		self.clearSort({
+		var clearOpts = jQuery.extend({}, opts, {
 			updateData: false
 		});
 
-		self.clearFilter({
-			updateData: false
-		});
+		self.debug(null, 'RESET!');
 
-		self.clearAggregate({
-			updateData: false
-		});
-
-		self.clearPivot({
-			updateData: false
-		});
-
-		self.clearGroup({
-			updateData: false
-		});
+		self.clearSort(clearOpts);
+		self.clearFilter(clearOpts);
+		self.clearAggregate(clearOpts);
+		self.clearPivot(clearOpts);
+		self.clearGroup(clearOpts);
 
 		if (!opts.updateData) {
 			delete self.lastOps;
@@ -44185,7 +48210,7 @@
 			throw new Error('Call Error: `colConfig` must be an instance of OrdMap');
 		}
 
-		debug.info('VIEW (' + self.name + ')', 'Setting column configuration');
+		self.debug(null, 'Setting column configuration');
 
 		self.colConfig = colConfig;
 	};
@@ -44222,49 +48247,314 @@
 		});
 	};
 
-	var transTbl = {
-		'en-US': {
-			'SHOWHIDE': 'Show/Hide',
-			'SHOWHIDEOPTS': 'Show/Hide Options'
+	// GroupFunction {{{1
+
+	/**
+	 * Represents a function that can be applied to the value of a field when grouping or pivotting.
+	 *
+	 * @param {object} spec
+	 * A specification for the group function.
+	 *
+	 * @param {string} spec.displayName
+	 * What should be shown in the user interface for this function's name.
+	 *
+	 * @param {Array.<string>} [spec.allowedTypes]
+	 * If present, this function will only be presented as an option for fields in the specified set of
+	 * data types (e.g. using `['datetime']` will restrict it to datetime fields only).  By default, the
+	 * group function will be shown for fields of all types on which DataVis supports group functions.
+	 *
+	 * @param {function} [spec.valueFun]
+	 * If present, this function will be used to transform the original data value into one used for
+	 * grouping.  If not provided, the default is the identity function.
+	 *
+	 * @param {string} [spec.resultType="string"]
+	 * The DataVis field type of the result of calling `valueFun`.
+	 *
+	 * @param {string} [spec.sortType=spec.resultType]
+	 * If present, overrides the algorithm for sorting group values, e.g. "month" to sort month names by
+	 * chronological (rather than alphabetical) order.
+	 *
+	 * @param {boolean} [canFilter=true]
+	 * If true, a filter can be applied to the data based on the result of this group function.  Used to
+	 * determine when drilldown is available, since drilling down means applying a filter that produces
+	 * exactly the population of the group.
+	 *
+	 * @param {function} [spec.valueToFilter]
+	 * If present, this function will be used to transform a value into a filter object that matches the
+	 * value.  Used for things like date buckets (e.g. a value "2010 October" becomes a filter for dates
+	 * from 10/1/2010 to 10/31/2010).
+	 *
+	 * @class
+	 */
+
+	var GroupFunction = makeSubclass('GroupFunction', Object, function (spec) {
+		var self = this;
+
+		spec = deepDefaults(spec, {});
+
+		if (spec.displayName == null || typeof spec.displayName !== 'string') {
+			throw new Error('Call Error: `displayName` must be a string');
 		}
+
+		if (spec.allowedTypes != null && !underscore.isArray(spec.allowedTypes)) {
+			throw new Error('Call Error: `allowedTypes` must be null or an array');
+		}
+
+		if (spec.valueFun != null && typeof spec.valueFun !== 'function') {
+			throw new Error('Call Error: `valueFun` must be null or a function');
+		}
+
+		if (spec.resultType != null && typeof spec.resultType !== 'string') {
+			throw new Error('Call Error: `resultType` must be null or a string');
+		}
+
+		if (spec.sortType != null && typeof spec.sortType !== 'string') {
+			throw new Error('Call Error: `sortType` must be null or a string');
+		}
+
+		if (spec.valueToFilter != null && typeof spec.valueToFilter !== 'function') {
+			throw new Error('Call Error: `valueToFilter` must be null or a function');
+		}
+
+		spec = deepDefaults(spec, {
+			resultType: 'string',
+			canFilter: true,
+			valueToFilter: function (s) {
+				return {'$eq': s};
+			}
+		});
+
+		if (spec.sortType == null) {
+			spec.sortType = spec.resultType;
+		}
+
+		copyProps(spec, self, ['displayName', 'allowedTypes', 'valueFun', 'resultType', 'sortType', 'canFilter', 'valueToFilter']);
+	});
+
+	// #applyValueFun {{{2
+
+	/**
+	 * Apply the function to get the value used for grouping.
+	 *
+	 * @param {any} x
+	 * The original value from the data.
+	 *
+	 * @returns {any}
+	 * The value that should be used for grouping purposes.
+	 */
+
+	GroupFunction.prototype.applyValueFun = function (x) {
+		return this.valueFun ? this.valueFun(x) : x;
 	};
 
-	var trans = function (k) {
-		var lang = navigator.language
-			, tbl = transTbl[lang] || transTbl['en-US'];
+	// Group Function Registry {{{1
 
-		return tbl[k] || k;
-	};
+	var GROUP_FUNCTION_REGISTRY = new OrdMap();
+
+	GROUP_FUNCTION_REGISTRY.set('year', new GroupFunction({
+		displayName: 'Year',
+		allowedTypes: ['date', 'datetime'],
+		valueFun: function (d) {
+			if (typeof d === 'string') {
+				d = moment(d);
+			}
+			if (!moment.isMoment(d) || !d.isValid()) {
+				return 'Invalid Date';
+			}
+			return d.format('YYYY');
+		},
+		valueToFilter: function (s) {
+			return {
+				'$gte': moment(s, 'YYYY').format('YYYY-MM-DD HH:mm:ss'),
+				'$lte': moment(s, 'YYYY').add(1, 'years').subtract(1, 'seconds').format('YYYY-MM-DD HH:mm:ss')
+			};
+		}
+	}));
+
+	GROUP_FUNCTION_REGISTRY.set('quarter', new GroupFunction({
+		displayName: 'Quarter',
+		allowedTypes: ['date', 'datetime'],
+		valueFun: function (d) {
+			if (typeof d === 'string') {
+				d = moment(d);
+			}
+			if (!moment.isMoment(d) || !d.isValid()) {
+				return 'Invalid Date';
+			}
+			return d.format('[Q]Q');
+		},
+		// The View does not currently offer a filter that matches a date within a specific quarter
+		// regardless of year (e.g. all dates in Q1 in any year).
+		canFilter: false
+	}));
+
+	GROUP_FUNCTION_REGISTRY.set('month', new GroupFunction({
+		displayName: 'Month',
+		allowedTypes: ['date', 'datetime'],
+		valueFun: function (d) {
+			if (typeof d === 'string') {
+				d = moment(d);
+			}
+			if (!moment.isMoment(d) || !d.isValid()) {
+				return 'Invalid Date';
+			}
+			return d.format('MMM');
+		},
+		sortType: 'month',
+		// The View does not currently offer a filter that matches a date within a specific month
+		// regardless of year (e.g. all dates in October in any year).
+		canFilter: false
+	}));
+
+	GROUP_FUNCTION_REGISTRY.set('week_iso', new GroupFunction({
+		displayName: 'Week (ISO)',
+		allowedTypes: ['date', 'datetime'],
+		valueFun: function (d) {
+			if (typeof d === 'string') {
+				d = moment(d);
+			}
+			if (!moment.isMoment(d) || !d.isValid()) {
+				return 'Invalid Date';
+			}
+			return d.format('[W]WW');
+		},
+		// The View does not currently offer a filter that matches a date within a specific week
+		// regardless of year.
+		canFilter: false
+	}));
+
+	GROUP_FUNCTION_REGISTRY.set('day', new GroupFunction({
+		displayName: 'Day Only (No Time)',
+		allowedTypes: ['datetime'],
+		valueFun: function (d) {
+			if (typeof d === 'string') {
+				d = moment(d);
+			}
+			if (!moment.isMoment(d) || !d.isValid()) {
+				return 'Invalid Date';
+			}
+			return d.format('YYYY-MM-DD');
+		},
+		resultType: 'date',
+		valueToFilter: function (s) {
+			return {
+				'$gte': moment(s).format('YYYY-MM-DD HH:mm:ss'),
+				'$lte': moment(s).add(1, 'days').subtract(1, 'seconds').format('YYYY-MM-DD HH:mm:ss')
+			};
+		}
+	}));
+
+	GROUP_FUNCTION_REGISTRY.set('day_of_week', new GroupFunction({
+		displayName: 'Day of Week',
+		allowedTypes: ['date', 'datetime'],
+		valueFun: function (d) {
+			if (typeof d === 'string') {
+				d = moment(d);
+			}
+			if (!moment.isMoment(d) || !d.isValid()) {
+				return 'Invalid Date';
+			}
+			return d.format('ddd');
+		},
+		sortType: 'day_of_week',
+		// The View does not currently offer a filter that matches a date for a specific day of the week
+		// (e.g. find all dates that fall on Tuesday).
+		canFilter: false
+	}));
+
+	GROUP_FUNCTION_REGISTRY.set('year_and_quarter', new GroupFunction({
+		displayName: 'Year & Quarter',
+		allowedTypes: ['date', 'datetime'],
+		valueFun: function (d) {
+			if (typeof d === 'string') {
+				d = moment(d);
+			}
+			if (!moment.isMoment(d) || !d.isValid()) {
+				return 'Invalid Date';
+			}
+			return d.format('YYYY [Q]Q');
+		},
+		valueToFilter: function (s) {
+			return {
+				'$gte': moment(s, 'YYYY [Q]Q').format('YYYY-MM-DD HH:mm:ss'),
+				'$lte': moment(s, 'YYYY [Q]Q').add(1, 'quarters').subtract(1, 'seconds').format('YYYY-MM-DD HH:mm:ss')
+			};
+		}
+	}));
+
+	GROUP_FUNCTION_REGISTRY.set('year_and_month', new GroupFunction({
+		displayName: 'Year & Month',
+		allowedTypes: ['date', 'datetime'],
+		valueFun: function (d) {
+			if (typeof d === 'string') {
+				d = moment(d);
+			}
+			if (!moment.isMoment(d) || !d.isValid()) {
+				return 'Invalid Date';
+			}
+			return d.format('YYYY MMM');
+		},
+		sortType: 'year_and_month',
+		valueToFilter: function (s) {
+			return {
+				'$gte': moment(s, 'YYYY MMM').format('YYYY-MM-DD HH:mm:ss'),
+				'$lte': moment(s, 'YYYY MMM').add(1, 'months').subtract(1, 'seconds').format('YYYY-MM-DD HH:mm:ss')
+			};
+		}
+	}));
+
+	GROUP_FUNCTION_REGISTRY.set('year_and_week_iso', new GroupFunction({
+		displayName: 'Year & Week (ISO)',
+		allowedTypes: ['date', 'datetime'],
+		valueFun: function (d) {
+			if (typeof d === 'string') {
+				d = moment(d);
+			}
+			if (!moment.isMoment(d) || !d.isValid()) {
+				return 'Invalid Date';
+			}
+			return d.format('YYYY [W]WW');
+		},
+		valueToFilter: function (s) {
+			return {
+				'$gte': moment(s, 'YYYY [W]WW').format('YYYY-MM-DD HH:mm:ss'),
+				'$lte': moment(s, 'YYYY [W]WW').add(1, 'weeks').subtract(1, 'seconds').format('YYYY-MM-DD HH:mm:ss')
+			};
+		}
+	}));
 
 	window.MIE              = window.MIE || {};
-		window.MIE.log          = log;
-		window.MIE.debug        = debug;
-		window.MIE.OrdMap       = OrdMap;
-		window.MIE.Lock         = Lock;
-		window.MIE.trans        = trans;
-		window.MIE.makeSubclass = makeSubclass;
+	window.MIE.log          = log;
+	window.MIE.debug        = debug;
+	window.MIE.OrdMap       = OrdMap;
+	window.MIE.Lock         = Lock;
+	window.MIE.trans        = trans;
+	window.MIE.makeSubclass = makeSubclass;
 
-		window.MIE.WC_DataVis                        = window.MIE.WC_DataVis || {};
-		window.MIE.WC_DataVis.Aggregate              = Aggregate;
-		window.MIE.WC_DataVis.AGGREGATE_REGISTRY     = AGGREGATE_REGISTRY;
-		window.MIE.WC_DataVis.ParamInput             = ParamInput;
-		window.MIE.WC_DataVis.Source                 = Source;
-		window.MIE.WC_DataVis.View                   = View;
-		window.MIE.WC_DataVis.Grid                   = Grid;
-		window.MIE.WC_DataVis.grids                  = {};
-		window.MIE.WC_DataVis.Graph                  = Graph;
-		window.MIE.WC_DataVis.graphs                 = {};
-		window.MIE.WC_DataVis.Perspective            = Perspective;
-		window.MIE.WC_DataVis.Prefs                  = Prefs;
-		window.MIE.WC_DataVis.PrefsBackend           = PrefsBackend;
-		window.MIE.WC_DataVis.PrefsModule            = PrefsModule;
-		window.MIE.WC_DataVis.PrefsModuleGrid        = PrefsModuleGrid;
-		window.MIE.WC_DataVis.PREFS_BACKEND_REGISTRY = PREFS_BACKEND_REGISTRY;
-		window.MIE.WC_DataVis.PREFS_MODULE_REGISTRY  = PREFS_MODULE_REGISTRY;
-		window.MIE.WC_DataVis.EXPORT_URL             = 'export.php';
+	window.MIE.WC_DataVis                 = window.MIE.WC_DataVis || {};
+	window.MIE.WC_DataVis.Aggregate       = Aggregate;
+	window.MIE.WC_DataVis.ParamInput      = ParamInput;
+	window.MIE.WC_DataVis.Source          = Source;
+	window.MIE.WC_DataVis.GroupFunction   = GroupFunction;
+	window.MIE.WC_DataVis.View            = View;
+	window.MIE.WC_DataVis.Grid            = Grid;
+	window.MIE.WC_DataVis.grids           = {};
+	window.MIE.WC_DataVis.Graph           = Graph;
+	window.MIE.WC_DataVis.graphs          = {};
+	window.MIE.WC_DataVis.Perspective     = Perspective;
+	window.MIE.WC_DataVis.Prefs           = Prefs;
+	window.MIE.WC_DataVis.PrefsBackend    = PrefsBackend;
+	window.MIE.WC_DataVis.PrefsModule     = PrefsModule;
+	window.MIE.WC_DataVis.PrefsModuleGrid = PrefsModuleGrid;
+	window.MIE.WC_DataVis.EXPORT_URL      = 'export.php';
 
-		window.MIE.WC_DataVis.Util                    = Util;
+	// Expose "registry" extension points
 
-	// vim:set ft=javascript:
+	window.MIE.WC_DataVis.AGGREGATE_REGISTRY      = AGGREGATE_REGISTRY;
+	window.MIE.WC_DataVis.GROUP_FUNCTION_REGISTRY = GROUP_FUNCTION_REGISTRY;
+	window.MIE.WC_DataVis.PREFS_BACKEND_REGISTRY  = PREFS_BACKEND_REGISTRY;
+	window.MIE.WC_DataVis.PREFS_MODULE_REGISTRY   = PREFS_MODULE_REGISTRY;
 
-}(undefined,undefined,jQuery));
+	window.MIE.WC_DataVis.Util                    = Util;
+
+}(jQuery, undefined, undefined));
