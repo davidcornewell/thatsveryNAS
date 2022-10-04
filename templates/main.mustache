@@ -21,8 +21,8 @@
     <link rel="stylesheet" href="css/wcdatavis.css" />
 		<link rel="stylesheet" href="css/tabletool.css"/>
 
-    <!-- Custom styles for this template 
-    <link href="css/thatsverynas.css" rel="stylesheet"> -->
+    <!-- Custom styles for this template -->
+    <link href="css/thatsverynas.css" rel="stylesheet">
     <script src="js/jquery-latest.js"></script>
     <script src="js/popper.min.js"></script>
     <script src="js/bootstrap.min.js"></script>
@@ -65,17 +65,21 @@
             </div>
           </li>
         </ul>
-        <form class="form-inline my-2 my-lg-0">
-          <input class="form-control mr-sm-2" type="text" placeholder="Search" aria-label="Search" name="mainsearch">
-          <button class="btn btn-outline-success my-2 my-sm-0" type="submit">Search</button>
-        </form>
       </div>
+      <form class="form-inline my-2 my-lg-0">
+      <table>
+        <tr><td>
+          <input class="form-control mr-sm-2" type="text" placeholder="Search" aria-label="Search" name="mainsearch">
+        </td><td>
+          <button class="btn btn-outline-success my-2 my-sm-0" type="submit">Search</button>
+        </td></tr>
+      </table>
+      </form>
     </nav>
 
     <main role="main" class="container">
 
       <div class="starter-template">
-        <h1>Bootstrap starter template</h1>
         <p class="lead">
         {{> templates/filesdatavis}}
         </p>

@@ -12,6 +12,14 @@ CREATE TABLE paths (
    FULLTEXT INDEX path (path)
 );
 
+CREATE TABLE subpaths (
+   subpath_id INT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
+   parent_path_id INT UNSIGNED NOT NULL,
+   path VARCHAR(1024) NOT NULL,
+   FULLTEXT INDEX path (path),
+   INDEX parent (parent_path_id)
+);
+
 CREATE TABLE exclusions (
    pattern VARCHAR(255) NOT NULL,
    path_id INT UNSIGNED NOT NULL
@@ -26,6 +34,7 @@ CREATE TABLE content_type (
 CREATE TABLE files (
    file_hash BINARY(32) NOT NULL PRIMARY KEY,
    path_id INT UNSIGNED NOT NULL,
+   subpath_id INT UNSIGNED NOT NULL,
    filename VARCHAR(512) NOT NULL,
    content_type INT UNSIGNED NOT NULL DEFAULT 0,
    modified_dt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

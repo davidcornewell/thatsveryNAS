@@ -1,4 +1,4 @@
-#!/usr/bin/python2.7
+#!/usr/bin/python3
 
 import MySQLdb
 import config
@@ -20,6 +20,14 @@ class ThatsVeryNAS:
         self.addpattern_stored="INSERT INTO exclusions (pattern,path_id) VALUES (%s,%s)"
         self.getpattern_stored="SELECT * FROM exclusions WHERE pattern=%s AND path_id=%s"
 
+        self.getfiles_generic_stored='''SELECT p.path,f.filename,f.modified_dt,f.status 
+        FROM files f LEFT JOIN paths p ON p.path_id=f.path_id 
+        WHERE f.status IN (IF(LENGTH('%s')>1, ('%s'), ('TRACKED')))'''
+ #       AND IF(%s>0, f.path_id=%s, 1) '''
+
+#        AND IF(LENGTH('%s', (MATCH (filename) AGAINST ('%s' IN NATURAL LANGUAGE MODE) 
+#          OR MATCH (p.path) AGAINST ('%s' IN NATURAL LANGUAGE MODE)), 1)'''
+
     def IsDBInstalled(self):
         # find the main table to see if DB was set up
         self.dbc.execute("SHOW TABLES LIKE 'files'")
@@ -29,9 +37,9 @@ class ThatsVeryNAS:
             return False
 
     def GetFiles(self, options):
-        self.dbc.execute('''SELECT p.path,f.filename,f.modified_dt,f.status 
-        FROM files f LEFT JOIN paths p ON p.path_id=f.path_id WHERE MATCH (filename) AGAINST ('%s' IN NATURAL LANGUAGE MODE) 
-        OR MATCH (p.path) AGAINST ('%s' IN NATURAL LANGUAGE MODE)''' %(options["mainsearch"],options["mainsearch"]))
+
+        self.dbc.execute(self.getfiles_generic_stored, [options["status"],options["status"]]) #,int(options["path_id"]),int(options["path_id"])]) 
+#,options["mainsearch"],options["mainsearch"],options["mainsearch"]])
         result={
             "columns": [x[0] for x in self.dbc.description], #this will extract row headers
             "rows": self.dbc.fetchall()

@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 import json
 import cgi
@@ -19,10 +19,15 @@ form_data = cgi.FieldStorage()
 
 searchopts = {
    "filename": form_data.getfirst('filename'),
-   "path_id": form_data.getfirst('path_id'),
-   "status": form_data.getfirst('status'),
+   "status": "", #form_data.getfirst('status'),
    "mainsearch": form_data.getfirst('mainsearch')
 }
+
+#if form_data.getfirst('path_id'):
+#   searchopts["path_id"]=int(form_data.getfirst('path_id'))
+#else:
+
+searchopts["path_id"]=0
 
 print("Content-Type: application/json\r\n\r\n")
 
