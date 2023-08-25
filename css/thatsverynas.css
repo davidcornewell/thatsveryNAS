@@ -1,3 +1,24 @@
 .nobr {
 	white-space: nowrap;
 }
+
+.below-nav {
+	margin-top: 72px;
+}
+
+fieldset {
+    border-width: 1px;
+    border-style: ridge;
+    border-color: #CCCCCC;
+    border-radius: 3px;
+	padding:0;
+	margin:0;
+}
+
+legend {
+	padding-right:5px
+}
+
+.minilink {
+	font-size: 12px;
+}

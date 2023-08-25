@@ -151,6 +151,7 @@ class ThatsVeryNAS:
             # decode bytes 
             if tag == "GPSInfo":
                 gpsinfo = {}
+                print("type {}". format(type(data)))
                 for gpskey in data:
                     decode = GPSTAGS.get(gpskey,gpskey)
                     if isinstance(data[gpskey], (bytes, bytearray)):

@@ -20,14 +20,14 @@
 		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.2.4/flatpickr.css"/>
     <link rel="stylesheet" href="css/wcdatavis.css" />
 		<link rel="stylesheet" href="css/tabletool.css"/>
-
     <!-- Custom styles for this template -->
-    <link href="css/thatsverynas.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/thatsverynas.css">
+
     <script src="js/jquery-latest.js"></script>
+    <script src="js/jquery-ui.js"></script>
     <script src="js/popper.min.js"></script>
     <script src="js/bootstrap.min.js"></script>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.blockUI/2.70/jquery.blockUI.js"></script>
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-contextmenu/2.6.3/jquery.contextMenu.min.js"></script>
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.sumoselect/3.0.2/jquery.sumoselect.min.js"></script>
@@ -35,7 +35,7 @@
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.2.4/flatpickr.min.js"></script>
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/4.6.1/papaparse.min.js"></script>
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/handlebars.js/4.0.12/handlebars.min.js"></script>
-    <script src="js/tabletool.js"></script>
+    <script src="js/tabletool.min.js"></script>
     <script src="js/wcdatavis.js"></script>
     <script src="js/thatsverynas.js"></script>
   </head>
@@ -43,7 +43,7 @@
   <body>
 
     <nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top">
-      <a class="navbar-brand" href="#">Navbar</a>
+<!--      <a class="navbar-brand" href="#">Navbar</a> -->
       <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarsExampleDefault" aria-controls="navbarsExampleDefault" aria-expanded="false" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
       </button>
@@ -51,10 +51,13 @@
       <div class="collapse navbar-collapse" id="navbarsExampleDefault">
         <ul class="navbar-nav mr-auto">
           <li class="nav-item active">
-            <a class="nav-link" href="#">Home <span class="sr-only">(current)</span></a>
+            <a class="nav-link" href="?">Home <span class="sr-only">(current)</span></a>
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="#">Admin</a>
+            <a class="nav-link" href="?page=files">Files</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="?page=admin">Admin</a>
           </li>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="" id="dropdown01" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Actions</a>
@@ -77,15 +80,6 @@
       </form>
     </nav>
 
-    <main role="main" class="container">
-
+    <main role="main" class="container below-nav">
       <div class="starter-template">
         <p class="lead">
-        {{> templates/filesdatavis}}
-        </p>
-      </div>
-
-    </main><!-- /.container -->
-
-  </body>
-</html>
