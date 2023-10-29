@@ -12,6 +12,9 @@ from PIL import Image
 from PIL.ExifTags import TAGS
 from PIL.ExifTags import GPSTAGS
 import magic
+import cv2
+import hashlib
+import face_recognition
 
 class ThatsVeryNAS:
     def __init__(self, config):
@@ -142,52 +145,82 @@ class ThatsVeryNAS:
     '''
     def AddImageData(self, file_hash, full_filename):
         image = Image.open(full_filename)
-        exifdata = image.getexif()
-        save_data = {}
-        for tag_id in exifdata:
-            # get the tag name, instead of human unreadable tag id
-            tag = TAGS.get(tag_id, tag_id)
-            data = exifdata.get(tag_id)
-            # decode bytes 
-            if tag == "GPSInfo":
-                gpsinfo = {}
-                print("type {}". format(type(data)))
-                for gpskey in data:
-                    decode = GPSTAGS.get(gpskey,gpskey)
-                    if isinstance(data[gpskey], (bytes, bytearray)):
-                        gpsinfo[decode] = data[gpskey].decode()
-                    elif isinstance(data[gpskey], (str)):
-                        gpsinfo[decode] = data[gpskey]
-                    elif isinstance(data[gpskey], (tuple)):
-                        gpsinfo[decode] = [x for x in data[gpskey]]
-                save_data[tag] = gpsinfo
+        exifdata = image._getexif()
+        if exifdata:
+            save_data = {}
+            for tag_id, data in exifdata.items():
+                # get the tag name, instead of human unreadable tag id
+                tag = TAGS.get(tag_id, tag_id)
+                # gotten in for loop now: data = exifdata.get(tag_id)
+                # decode bytes 
+                if tag == "GPSInfo" and type(data) != int:
+                    gpsinfo = {}
+                    print("type {}". format(type(data)))
+                    for gpskey in data:
+                        decode = GPSTAGS.get(gpskey,gpskey)
+                        print("gpskey type {} = {}, {}". format(decode,type(data[gpskey]), str(data[gpskey])))
+                        if type(data[gpskey]) == (bytes, bytearray):
+                            gpsinfo[decode] = data[gpskey].decode()
+                        elif type(data[gpskey]) == (bytes):
+                            gpsinfo[decode] = data[gpskey].decode()-
+                        elif type(data[gpskey]) == (str):
+                            gpsinfo[decode] = data[gpskey]
+                        elif type(data[gpskey]) == (tuple):
+                            gpsinfo[decode] = [x for x in data[gpskey]]
+                        elif type(data[gpskey]) == (int):
+                            gpsinfo[decode] = data[gpskey]
+                    save_data[tag] = gpsinfo
 
-            elif isinstance(data, (bytes, bytearray)):
-#                print("Tag: %s, byte: %s" %(tag,data))
-                try:
-                    data = data.decode()
+                elif tag == "XResolution" or tag == "YResolution":
+                    save_data[tag] = str(data)
+
+                elif isinstance(data, (bytes, bytearray)):
+    #                print("Tag: %s, byte: %s" %(tag,data))
+                    try:
+                        data = data.decode()
+                        save_data[tag] = data
+                    except:
+                        print("Invalid data? %s: %s" %(tag,data))
+                elif isinstance(data, (int)):
+    #                print("Tag: %s, int: %d" %(tag,data))
+                    save_data[tag] = str(data)
+                elif isinstance(data, (str)):
+    #                print("Tag: %s, str: %s" %(tag,data))
+                    if re.fullmatch(r'[1-9][0-0][0-9][0-9]:[0-9][0-9]:[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9]', data):
+                        # weird dataformate
+                        change=list(data)
+                        change[4] = '-'
+                        change[7] = '-'
+                        data = "".join(change)
                     save_data[tag] = data
-                except:
-                    print("Invalid data? %s: %s" %(tag,data))
-            elif isinstance(data, (int)):
-#                print("Tag: %s, int: %d" %(tag,data))
-                save_data[tag] = str(data)
-            elif isinstance(data, (str)):
-#                print("Tag: %s, str: %s" %(tag,data))
-                if re.fullmatch(r'[1-9][0-0][0-9][0-9]:[0-9][0-9]:[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9]', data):
-                    # weird dataformate
-                    change=list(data)
-                    change[4] = '-'
-                    change[7] = '-'
-                    data = "".join(change)
-                save_data[tag] = data
-            elif isinstance(data, (tuple)):
-#                print("Tag: %s, tuple: %s" %(tag,data))
-                save_data[tag] = [x for x in data]
-            else: 
-                print("Invalid tag? %s: %s its:%s" %(tag,data,type(data)))
-        print("%s" %(save_data))
-        self.dbc.execute("INSERT INTO file_image_metadata SET file_hash=UNHEX(%s), image_metadata=%s", (file_hash, json.dumps(save_data)))
+                elif isinstance(data, (tuple)):
+    #                print("Tag: %s, tuple: %s" %(tag,data))
+                    save_data[tag] = [x for x in data]
+                else: 
+                    print("Invalid tag? %s: %s its:%s" %(tag,data,type(data)))
+            print("%s" %(save_data))
+            self.dbc.execute("INSERT INTO file_image_metadata SET file_hash=UNHEX(%s), image_metadata=%s", (file_hash, json.dumps(save_data)))
+
+    def AddFaces(self, file_hash, full_filename):
+        # Load the input image
+        img = cv2.imread('input.jpg')
+
+        # Detect faces in the input image
+        face_locations = face_recognition.face_locations(img)
+
+        # Encode the faces in the input image
+        face_encodings = face_recognition.face_encodings(img, face_locations)
+
+        # Store the face encodings for each face in the database
+        # We store individual face data and link to the file
+        for encoding in face_encodings:
+            val = (str(encoding.tolist()),)
+            self.dbc.execute.execute("INSERT INTO people_faces (face_data) VALUES (%s)", val)
+            cnx.commit()
+
+            file_image_face
+
+
 
     def AddFile(self, subpath_id, filename, full_filename):
         BLOCKSIZE = 65536
@@ -235,6 +268,7 @@ class ThatsVeryNAS:
         self.db.commit()
         if content_type in [1,2,3]:
             self.AddImageData(file_hash, full_filename)
+            self.AddFaces(file_hash, full_filename)
 
     def ScanPath(self,path_id):
         # open a log file for skipped files if configured
