@@ -30,6 +30,8 @@ else:
       print(renderer.render_path('templates/admin.mustache', {'paths': paths}))
    elif page == "files":
       print(renderer.render_path('templates/filesdatavis.mustache', {'page': ''}))
+   elif page == "photos":
+      print(renderer.render_path('templates/photofinder.mustache', {'page': ''}))
    else:
       print(renderer.render_path('templates/home.mustache', {'page': ''}))
 

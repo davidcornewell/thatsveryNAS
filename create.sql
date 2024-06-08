@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS people (
 
 CREATE TABLE IF NOT EXISTS people_faces (
    face_id INT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
-   people_id INT UNSIGNED NOT NULL,
+   people_id INT UNSIGNED NOT NULL DEFAULT 0,
    face_data TEXT NOT NULL,
    INDEX people_id (people_id),
    UNIQUE INDEX face_data (face_data)

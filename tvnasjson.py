@@ -20,6 +20,7 @@ form_data = cgi.FieldStorage()
 searchopts = {
    "filename": form_data.getfirst('filename'),
    "status": "", #form_data.getfirst('status'),
+   "types": form_data.getlist('types'),
    "mainsearch": form_data.getfirst('mainsearch')
 }
 
@@ -33,12 +34,29 @@ print("Content-Type: application/json\r\n\r\n")
 
 files = tvnas.GetFiles(searchopts)
 
+json_response=[]
+for result in files["rows"]:
+    json_response.append(dict(zip(files["columns"],result)))
+    if json_response[len(json_response)-1]["face_data"]:
+        json_response[len(json_response)-1]["face_data"] = json.loads(json_response[len(json_response)-1]["face_data"])
+
+    if json_response[len(json_response)-1]["image_metadata"]:
+        json_response[len(json_response)-1]["image_metadata"] = json.loads(json_response[len(json_response)-1]["image_metadata"])
+        
+
+print(json.dumps(json_response, indent=4, sort_keys=True, cls=DateTimeEncoder))
+
+'''
 json_response={"data": [], "typeInfo": []}
 
 for col in files["columns"]:
-    json_response["typeInfo"].append({"field": col, "type": "string"})
+    if col=="face_data":
+        json_response["typeInfo"].append({"field": col, "type": "array"})
+    else:
+        json_response["typeInfo"].append({"field": col, "type": "string"})
 
 for result in files["rows"]:
     json_response["data"].append(dict(zip(files["columns"],result)))
 
 print(json.dumps(json_response, indent=4, sort_keys=True, cls=DateTimeEncoder))
+'''

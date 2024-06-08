@@ -12,7 +12,6 @@ from PIL import Image
 from PIL.ExifTags import TAGS
 from PIL.ExifTags import GPSTAGS
 import magic
-import cv2
 import hashlib
 import face_recognition
 
@@ -32,12 +31,7 @@ class ThatsVeryNAS:
         self.addpattern_stored="INSERT INTO exclusions (pattern,subpath_id) VALUES (%s,%s)"
         self.getpattern_stored="SELECT * FROM exclusions WHERE pattern=%s AND subpath_id=%s"
 
-        self.getfiles_generic_stored='''SELECT p.path,sp.path,f.filename,f.modified_dt,f.status 
-        FROM files f
-        LEFT JOIN subpaths sp ON sp.path_id=f.subpath_id
-        LEFT JOIN paths p ON p.path_id=sp.path_id 
-        WHERE f.status IN (IF(LENGTH('%s')>1, ('%s'), ('TRACKED')))'''
- #       AND IF(%s>0, f.path_id=%s, 1) '''
+#       AND IF(%s>0, f.path_id=%s, 1) '''
 
 #        AND IF(LENGTH('%s', (MATCH (filename) AGAINST ('%s' IN NATURAL LANGUAGE MODE) 
 #          OR MATCH (p.path) AGAINST ('%s' IN NATURAL LANGUAGE MODE)), 1)'''
@@ -50,10 +44,40 @@ class ThatsVeryNAS:
         else:
             return False
 
+    def GetFile(self, file_hash):
+        getfile_generic_stored='''SELECT p.path AS `path`,sp.path AS `subpath`,f.filename,f.modified_dt,f.status,ct.description,ct.http_header 
+            FROM files f
+            LEFT JOIN subpaths sp ON sp.subpath_id=f.subpath_id
+            LEFT JOIN paths p ON p.path_id=sp.path_id 
+            LEFT JOIN content_types ct ON ct.content_type=f.content_type
+            WHERE f.file_hash=UNHEX(%s) '''
+        self.dbc.execute(getfile_generic_stored, [file_hash])
+        return self.dbc.fetchall()
+        
     def GetFiles(self, options):
+        # add a join to get image data as face_data. In PROGRESS
+        getfiles_generic_stored='''SELECT p.path AS `path`,sp.path AS `subpath`,HEX(f.file_hash) AS `file_hash`,f.filename,f.modified_dt,f.status,ct.description, 
+             CONCAT('[',GROUP_CONCAT(DISTINCT(fif.face_box)),']') AS `face_data`,
+             image_metadata
+        FROM files f
+        LEFT JOIN file_image_face fif ON fif.file_hash=f.file_hash 
+        LEFT JOIN file_image_metadata meta ON meta.file_hash=f.file_hash 
+        LEFT JOIN subpaths sp ON sp.subpath_id=f.subpath_id
+        LEFT JOIN paths p ON p.path_id=sp.path_id 
+        LEFT JOIN content_types ct ON ct.content_type=f.content_type
+        WHERE f.status=%s 
+        GROUP BY f.file_hash'''
+        params=[options["status"] if len(options["status"])>0 else "TRACKED"]
 
-        self.dbc.execute(self.getfiles_generic_stored, [options["status"],options["status"]]) #,int(options["path_id"]),int(options["path_id"])]) 
-#,options["mainsearch"],options["mainsearch"],options["mainsearch"]])
+        if isinstance(options["filename"], str) and len(options["filename"])>0:
+            getfiles_generic_stored = getfiles_generic_stored + " AND f.filename like CONCAT('%%', %s, '%%')"
+            params.append(options["filename"])
+        if isinstance(options["types"], list) and len(options["types"])>0:
+            placeholders = ', '.join(['%s' for _ in options["types"]])
+            getfiles_generic_stored = getfiles_generic_stored + f" AND ct.description IN ({placeholders})"
+            params.extend(options["types"])
+ 
+        self.dbc.execute(getfiles_generic_stored, params)
         result={
             "columns": [x[0] for x in self.dbc.description], #this will extract row headers
             "rows": self.dbc.fetchall()
@@ -162,7 +186,7 @@ class ThatsVeryNAS:
                         if type(data[gpskey]) == (bytes, bytearray):
                             gpsinfo[decode] = data[gpskey].decode()
                         elif type(data[gpskey]) == (bytes):
-                            gpsinfo[decode] = data[gpskey].decode()-
+                            gpsinfo[decode] = data[gpskey].decode()
                         elif type(data[gpskey]) == (str):
                             gpsinfo[decode] = data[gpskey]
                         elif type(data[gpskey]) == (tuple):
@@ -199,11 +223,13 @@ class ThatsVeryNAS:
                 else: 
                     print("Invalid tag? %s: %s its:%s" %(tag,data,type(data)))
             print("%s" %(save_data))
-            self.dbc.execute("INSERT INTO file_image_metadata SET file_hash=UNHEX(%s), image_metadata=%s", (file_hash, json.dumps(save_data)))
+            self.dbc.execute("INSERT INTO file_image_metadata SET file_hash=UNHEX('%s'), image_metadata='%s'" %(file_hash, json.dumps(save_data)))
 
     def AddFaces(self, file_hash, full_filename):
+        print("Looking for faces %s (%s)" %(full_filename,file_hash))
+
         # Load the input image
-        img = cv2.imread('input.jpg')
+        img = face_recognition.load_image_file(full_filename)
 
         # Detect faces in the input image
         face_locations = face_recognition.face_locations(img)
@@ -213,13 +239,32 @@ class ThatsVeryNAS:
 
         # Store the face encodings for each face in the database
         # We store individual face data and link to the file
-        for encoding in face_encodings:
+        i=0
+        for encoding in face_encodings: 
             val = (str(encoding.tolist()),)
-            self.dbc.execute.execute("INSERT INTO people_faces (face_data) VALUES (%s)", val)
-            cnx.commit()
+            self.dbc.execute("""SELECT face_id FROM people_faces
+                    WHERE face_data=%s""",
+                    [val])
+            if (self.dbc.rowcount == 0):
+                self.dbc.execute("INSERT INTO people_faces (face_data) VALUES (%s)", [val])
 
-            file_image_face
+                # Get face ID to link to image file
+                face_id=self.dbc.lastrowid
 
+                # Get location of face
+                (top, right, bottom, left) = face_locations[i]
+                print("Face: ID:%d @%d, %d, %d, %d" %(face_id,top,left,bottom,right))
+
+                print("INSERT INTO file_image_face (file_hash,face_id,face_box) VALUES (UNHEX('%s'), %d, '{\"top\":%d, \"left\":%d, \"bottom\":%d, \"right\":%d}')"
+                        %(file_hash, face_id, top,left,bottom,right))
+                self.dbc.execute("INSERT INTO file_image_face (file_hash,face_id,face_box) VALUES (UNHEX('%s'), %d, '{\"top\":%d, \"left\":%d, \"bottom\":%d, \"right\":%d}')" 
+                        %(file_hash, face_id, top,left,bottom,right))
+                self.db.commit()
+
+            i=i+1
+        
+        # just testin one
+        exit(0)
 
 
     def AddFile(self, subpath_id, filename, full_filename):
@@ -235,42 +280,46 @@ class ThatsVeryNAS:
         if (config.updatefilelog):
             fupdated = open(config.updatefilelog, 'a')
 
+        print("Adding %s" %(full_filename))
+
         # If the filename exists but the file hash is different we need
         # to change the status on it to indicate the file exists but as a
         # different hash
         self.dbc.execute("""SELECT HEX(file_hash) FROM files
-                WHERE subpath_id=%s AND filename=%s AND file_hash!=UNHEX(%s)""",
-                (subpath_id, filename, file_hash))
+                WHERE subpath_id=%d AND filename='%s' AND file_hash!=UNHEX('%s')"""
+                %(subpath_id, filename, file_hash))
         if (self.dbc.rowcount > 0):
             row=self.dbc.fetchone()
             if (fupdated):
                 fupdated.write("UPDATING file: %s (%s != %s)\n" %(filename,
                     file_hash, row[0]))
             self.dbc.execute("""UPDATE files SET status='UPDATED' WHERE
-                    file_hash=UNHEX(%s)""", {row[0]})
+                    file_hash=UNHEX('%s')""" %(row[0]))
 
         content_type=self.GetContentTypeFromFile(full_filename)
 
         # Insert the file. if the hash exists, update path and filename
         # if it moved. Add a file duplicate if they both exist
         self.dbc.execute("""SELECT HEX(file_hash) FROM files
-                WHERE file_hash=UNHEX(%s)""",
-                {file_hash})
+                WHERE file_hash=UNHEX('%s')"""
+                %(file_hash))
         if (self.dbc.rowcount > 0):
             self.dbc.execute("""INSERT INTO file_duplicates
-                    SET file_hash=UNHEX(%s), subpath_id=%s, filename=%s""",
-                    (file_hash, subpath_id, filename))
+                    SET file_hash=UNHEX('%s'), subpath_id=%d, filename='%s'"""
+                    %(file_hash, subpath_id, filename))
         else:
             self.dbc.execute("""INSERT INTO files
-                    SET file_hash=UNHEX(%s), subpath_id=%s, filename=%s, content_type=%s
-                    ON DUPLICATE KEY UPDATE subpath_id=%s, filename=%s""",
-                    (file_hash, subpath_id, filename, content_type, subpath_id, filename))
+                    SET file_hash=UNHEX('%s'), subpath_id=%d, filename='%s', content_type=%d
+                    ON DUPLICATE KEY UPDATE subpath_id=%d, filename='%s'"""
+                    %(file_hash, subpath_id, filename, content_type, subpath_id, filename))
         self.db.commit()
         if content_type in [1,2,3]:
+            print("Image file: %s" %(full_filename))
             self.AddImageData(file_hash, full_filename)
             self.AddFaces(file_hash, full_filename)
 
     def ScanPath(self,path_id):
+        print("Scanning %d" %(path_id))
         # open a log file for skipped files if configured
         if (config.skipfilelog):
             if not os.path.exists(os.path.dirname(config.skipfilelog)):
@@ -284,25 +333,27 @@ class ThatsVeryNAS:
 
         # Get given path or all paths
         if (path_id>0):
-            self.dbc.execute("SELECT path FROM paths WHERE path_id=%s",(path_id))
+            self.dbc.execute("SELECT path_id,path FROM paths WHERE path_id=%d" %(path_id))
         else:
             self.dbc.execute("SELECT path_id,path FROM paths WHERE status='ACTIVE'")
         paths=self.dbc.fetchall()
         for path_id,path in paths:
             print("%s, %s" %(path_id, path))
 
-            self.dbc.execute("SELECT subpath_id,path FROM subpaths WHERE status='ACTIVE' AND path_id=%s" %(path_id))
+            self.dbc.execute("SELECT subpath_id,path FROM subpaths WHERE status='ACTIVE' AND path_id=%d" %(path_id))
             subpaths=self.dbc.fetchall()
             for subpath_id,subpath in subpaths:
+                print("%s, %s" %(subpath_id,subpath))
+
                 # Get exclusions for the path as well as exclusions for all subpaths
-                self.dbc.execute("SELECT pattern FROM exclusions WHERE subpath_id IN (0,%s)" %(subpath_id))
+                self.dbc.execute("SELECT pattern FROM exclusions WHERE subpath_id IN (0,%d)" %(subpath_id))
                 patterns=self.dbc.fetchall()
 
                 for cur_path, dirs, files in os.walk(os.path.join(path, subpath)):
                     for file in files:
                         skip=False
                         full_filename=os.path.join(path, subpath, cur_path, file)
-                        rel_filename=full_filename[len(path):]
+                        rel_filename=full_filename[len(path)+len(subpath)+1:]
                         for pattern in patterns:
                             if (re.match("%s" %(pattern), "%s" %(rel_filename)) != None):
                                 skip=True
@@ -347,7 +398,8 @@ if __name__ == '__main__':
         path_id=nas.AddPath(args.addpath)
         if (path_id>0):
             print("Path is ID: %d" %path_id)
-
+        if (args.scan):
+            nas.ScanPath(path_id)
     elif (args.addexclusion_pattern):
         nas.AddExclusionPattern(args.addexclusion,0)
 
