@@ -1,0 +1,85 @@
+<div id="picture_list"></div>
+
+<script>
+function HighlightFaces(canvas, origW, origH, face_data) {
+    if (face_data && face_data.length && canvas.getContext) {
+        const ctx = canvas.getContext("2d");
+        const img = new Image();
+        img.src = canvas.style.backgroundImage.slice(5, -2); // Extract URL from 'background-image'
+
+        img.onload = function() {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            
+            // Calculate scaling factors
+            const scaleX = canvas.width / origW;
+            const scaleY = canvas.height / origH;
+            
+            ctx.strokeStyle = "#ff6";
+            ctx.lineWidth = 2;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+            
+            for (let i = 0; i < face_data.length; i++) {
+                const top = face_data[i].top * scaleY;
+                const left = face_data[i].left * scaleX;
+                const width = (face_data[i].right - face_data[i].left) * scaleX;
+                const height = (face_data[i].bottom - face_data[i].top) * scaleY;
+                
+                console.log(`l:${left} t:${top} w:${width} h:${height}`);
+                ctx.strokeRect(left, top, width, height);
+            }
+        };
+    }
+}
+
+function DisplayPhotos(photos) {
+    var container = jQuery('#picture_list');
+    photos.forEach(photo => {
+        const canvas = jQuery('<canvas style="margin:10px; background: url(\'' + photo.src + '\') center center/ contain no-repeat;" />');
+        canvas.attr('id', photo.file_hash);
+        container.append(canvas);
+        
+        // Ensure canvas is drawn correctly after it's added to the DOM
+        canvas.on('load', function() {
+            HighlightFaces(canvas[0], photo.image_metadata.ExifImageWidth, photo.image_metadata.ExifImageHeight, photo.face_data);
+        });
+
+        // Trigger the load event manually as we are not using an actual image element
+        var img = new Image();
+        img.src = photo.src;
+        img.onload = function() {
+            canvas.trigger('load');
+        };
+    });
+}
+
+	// http	s://www.jqueryscript.net/gallery/Responsive-Photo-Viewer.html
+//	var options = {
+//		callbacks: {
+//			opened: onOpen
+//		}
+//		 appendTo: 'picture_list',
+//	};
+
+	jQuery.ajax({
+		url: 'tvnasjson.py?types=JPG&filename=KLC_467',
+		data: null,
+		success: function (result) {
+			var photos=[];
+
+			for (var i=0; i<result.length; i++) {
+				photos.push({
+					src: 'tvnasstream.py?file_hash='+result[i].file_hash,
+					title: result[i].filename,
+					file_hash: result[i].file_hash,
+					face_data: result[i].face_data,
+					image_metadata: result[i].image_metadata
+					});
+			}
+			DisplayPhotos(photos);
+		}
+	});
+</script>
+

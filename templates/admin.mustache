@@ -1,0 +1,18 @@
+<script>
+</script>
+
+<fieldset>
+    <legend>Paths <span class="minilink">(<a href="">Add</a>)</span></legend>
+    <div class="controlgroup">
+	<ul>
+	{{#paths}}
+	<li>{{path}} <span class="minilink">(<a href="javascript: window['tvnas'].addSubPath('{{path_id}}', '{{path}}')">Add Sub Path</a>)</span></li>
+		<ul>
+		{{#subpaths}}
+		<li>{{.}}</li>
+		{{/subpaths}}
+		</ul>
+	{{/paths}}
+	</ul>
+	</div>
+</fieldset>
