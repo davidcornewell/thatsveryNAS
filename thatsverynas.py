@@ -8,12 +8,112 @@ import errno
 import re
 import hashlib
 import json
-from PIL import Image
+from PIL import Image, TiffImagePlugin
 from PIL.ExifTags import TAGS
 from PIL.ExifTags import GPSTAGS
 import magic
 import hashlib
 import face_recognition
+import multiprocessing
+
+import multiprocessing
+import face_recognition
+import MySQLdb
+import config
+import time
+
+
+class ThatsVeryNAS_AddFaceQueue:
+    def __init__(self, config):
+        self.db_config = {
+            "host": config.dbhost,
+            "user": config.dbuser,
+            "passwd": config.dbpass,
+            "db": config.dbname,
+        }
+        self.connect_to_db()
+
+    def connect_to_db(self):
+        """Establish a database connection."""
+        self.db = MySQLdb.connect(**self.db_config)
+        self.dbc = self.db.cursor()
+
+    def AddFaces(self, file_hash, full_filename):
+        try:
+            print(f"Looking for faces {full_filename} ({file_hash})")
+
+            img = face_recognition.load_image_file(full_filename)
+            face_locations = face_recognition.face_locations(img)
+            face_encodings = face_recognition.face_encodings(img, face_locations)
+
+            if not face_encodings:  # No faces found
+                print(f"No faces found in {full_filename}. Inserting a blank record.")
+                self.dbc.execute(
+                    """
+                    INSERT INTO file_image_face (file_hash, face_id, face_box)
+                    VALUES (UNHEX(%s), 0, NULL)
+                    """,
+                    [file_hash],
+                )
+                self.db.commit()
+                return
+
+            # Process faces if found
+            for i, encoding in enumerate(face_encodings):
+                val = (str(encoding.tolist()),)
+                self.dbc.execute(
+                    """SELECT face_id FROM people_faces WHERE face_data=%s""", [val]
+                )
+
+                if self.dbc.rowcount == 0:
+                    self.dbc.execute(
+                        "INSERT INTO people_faces (face_data) VALUES (%s)", [val]
+                    )
+                    face_id = self.dbc.lastrowid
+                    top, right, bottom, left = face_locations[i]
+                    self.dbc.execute(
+                        """
+                        INSERT INTO file_image_face
+                        (file_hash, face_id, face_box)
+                        VALUES (UNHEX(%s), %s, %s)
+                        """,
+                        (
+                            file_hash,
+                            face_id,
+                            '{"top":%d, "left":%d, "bottom":%d, "right":%d}'
+                            % (top, left, bottom, right),
+                        ),
+                    )
+                    self.db.commit()
+
+        except MySQLdb.OperationalError as e:
+            print(f"MySQL error: {e}. Reconnecting...")
+            self.connect_to_db()  # Reconnect on connection issues
+        except Exception as e:
+            print(f"Error processing {full_filename}: {e}")
+
+    def AddFacesFromQueue(self, task_queue):
+        try:
+            while (file := task_queue.get()) is not None:
+                file_hash, full_filename = file
+                try:
+                    self.AddFaces(file_hash, full_filename)
+                except Exception as e:
+                    print(f"Error processing queue item {file}: {e}")
+        finally:
+            self.dbc.close()
+            self.db.close()
+
+    @staticmethod
+    def Start(config, task_queue):
+        """Create a background process for processing the queue."""
+        processor = ThatsVeryNAS_AddFaceQueue(config)
+        process = multiprocessing.Process(
+            target=processor.AddFacesFromQueue, args=(task_queue,)
+        )
+        process.daemon = True
+        process.start()
+        return process
 
 class ThatsVeryNAS:
     def __init__(self, config):
@@ -30,6 +130,8 @@ class ThatsVeryNAS:
         self.getsubpaths_stored="SELECT subpath_id,path_id,path,status FROM subpaths WHERE status='ACTIVE' AND path_id=%s"
         self.addpattern_stored="INSERT INTO exclusions (pattern,subpath_id) VALUES (%s,%s)"
         self.getpattern_stored="SELECT * FROM exclusions WHERE pattern=%s AND subpath_id=%s"
+        self.face_task_queue = multiprocessing.Queue()
+        self.face_background_process = None
 
 #       AND IF(%s>0, f.path_id=%s, 1) '''
 
@@ -164,10 +266,36 @@ class ThatsVeryNAS:
             
         return 0
 
+    # Helper function to convert IFDRational to float or tuple
+    def convert_ifd_rational(self, obj):
+        if isinstance(obj, TiffImagePlugin.IFDRational):
+            # Convert TiffImagePlugin.IFDRational to a tuple or a float
+            return obj[0] / obj[1]  # Rational value as a float
+        elif isinstance(obj, dict):
+            # Recursively process dictionary
+            return {k: self.convert_ifd_rational(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            # Recursively process list
+            return [self.convert_ifd_rational(v) for v in obj]
+        else:
+            # If it's not an IFDRational, return the object as is
+            return obj
+
+    '''
+    Check if we have image metadata
+    '''
+    def HasImageData(self, file_hash):
+        self.dbc.execute("""SELECT HEX(file_hash) FROM file_image_metadata WHERE file_hash=UNHEX('%s')"""
+                %(file_hash))
+        return self.dbc.rowcount
+    
     '''
     Read image metadata and scan for faces. Store findings
     '''
     def AddImageData(self, file_hash, full_filename):
+        if self.HasImageData(file_hash):
+            return
+
         image = Image.open(full_filename)
         exifdata = image._getexif()
         if exifdata:
@@ -175,97 +303,64 @@ class ThatsVeryNAS:
             for tag_id, data in exifdata.items():
                 # get the tag name, instead of human unreadable tag id
                 tag = TAGS.get(tag_id, tag_id)
-                # gotten in for loop now: data = exifdata.get(tag_id)
                 # decode bytes 
                 if tag == "GPSInfo" and type(data) != int:
                     gpsinfo = {}
-                    print("type {}". format(type(data)))
+                    print("type {}".format(type(data)))
                     for gpskey in data:
-                        decode = GPSTAGS.get(gpskey,gpskey)
-                        print("gpskey type {} = {}, {}". format(decode,type(data[gpskey]), str(data[gpskey])))
-                        if type(data[gpskey]) == (bytes, bytearray):
+                        decode = GPSTAGS.get(gpskey, gpskey)
+                        print("gpskey type {} = {}, {}".format(decode, type(data[gpskey]), str(data[gpskey])))
+                        if isinstance(data[gpskey], (bytes, bytearray)):
                             gpsinfo[decode] = data[gpskey].decode()
-                        elif type(data[gpskey]) == (bytes):
-                            gpsinfo[decode] = data[gpskey].decode()
-                        elif type(data[gpskey]) == (str):
+                        elif isinstance(data[gpskey], str):
                             gpsinfo[decode] = data[gpskey]
-                        elif type(data[gpskey]) == (tuple):
-                            gpsinfo[decode] = [x for x in data[gpskey]]
-                        elif type(data[gpskey]) == (int):
-                            gpsinfo[decode] = data[gpskey]
+                        elif isinstance(data[gpskey], int):
+                            gpsinfo[decode] = str(data[gpskey])
+                        elif isinstance(data[gpskey], float):
+                            gpsinfo[decode] = str(data[gpskey])
+                        elif isinstance(data[gpskey], tuple):
+                            gpsinfo[decode] = [str(x) for x in data[gpskey]]
+                        else:
+                            gpsinfo[decode] = str(data[gpskey])
                     save_data[tag] = gpsinfo
 
                 elif tag == "XResolution" or tag == "YResolution":
                     save_data[tag] = str(data)
 
                 elif isinstance(data, (bytes, bytearray)):
-    #                print("Tag: %s, byte: %s" %(tag,data))
                     try:
                         data = data.decode()
                         save_data[tag] = data
                     except:
-                        print("Invalid data? %s: %s" %(tag,data))
-                elif isinstance(data, (int)):
-    #                print("Tag: %s, int: %d" %(tag,data))
+                        print("Invalid data in tag:%s" % (tag))
+                elif isinstance(data, int):
                     save_data[tag] = str(data)
-                elif isinstance(data, (str)):
-    #                print("Tag: %s, str: %s" %(tag,data))
+                elif isinstance(data, str):
                     if re.fullmatch(r'[1-9][0-0][0-9][0-9]:[0-9][0-9]:[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9]', data):
-                        # weird dataformate
-                        change=list(data)
+                        # weird data format
+                        change = list(data)
                         change[4] = '-'
                         change[7] = '-'
                         data = "".join(change)
                     save_data[tag] = data
-                elif isinstance(data, (tuple)):
-    #                print("Tag: %s, tuple: %s" %(tag,data))
-                    save_data[tag] = [x for x in data]
-                else: 
-                    print("Invalid tag? %s: %s its:%s" %(tag,data,type(data)))
-            print("%s" %(save_data))
-            self.dbc.execute("INSERT INTO file_image_metadata SET file_hash=UNHEX('%s'), image_metadata='%s'" %(file_hash, json.dumps(save_data)))
+                elif isinstance(data, tuple):
+                    save_data[tag] = [str(x) for x in data]
+                else:
+                    save_data[tag] = str(data)
 
-    def AddFaces(self, file_hash, full_filename):
-        print("Looking for faces %s (%s)" %(full_filename,file_hash))
+            # Before calling json.dumps(), convert the data
+            save_data = self.convert_ifd_rational(save_data)
+            print("%s" % (save_data))
+            self.dbc.execute("INSERT INTO file_image_metadata SET file_hash=UNHEX('%s'), image_metadata='%s'" % (file_hash, json.dumps(save_data)))
+            self.db.commit()
 
-        # Load the input image
-        img = face_recognition.load_image_file(full_filename)
-
-        # Detect faces in the input image
-        face_locations = face_recognition.face_locations(img)
-
-        # Encode the faces in the input image
-        face_encodings = face_recognition.face_encodings(img, face_locations)
-
-        # Store the face encodings for each face in the database
-        # We store individual face data and link to the file
-        i=0
-        for encoding in face_encodings: 
-            val = (str(encoding.tolist()),)
-            self.dbc.execute("""SELECT face_id FROM people_faces
-                    WHERE face_data=%s""",
-                    [val])
-            if (self.dbc.rowcount == 0):
-                self.dbc.execute("INSERT INTO people_faces (face_data) VALUES (%s)", [val])
-
-                # Get face ID to link to image file
-                face_id=self.dbc.lastrowid
-
-                # Get location of face
-                (top, right, bottom, left) = face_locations[i]
-                print("Face: ID:%d @%d, %d, %d, %d" %(face_id,top,left,bottom,right))
-
-                print("INSERT INTO file_image_face (file_hash,face_id,face_box) VALUES (UNHEX('%s'), %d, '{\"top\":%d, \"left\":%d, \"bottom\":%d, \"right\":%d}')"
-                        %(file_hash, face_id, top,left,bottom,right))
-                self.dbc.execute("INSERT INTO file_image_face (file_hash,face_id,face_box) VALUES (UNHEX('%s'), %d, '{\"top\":%d, \"left\":%d, \"bottom\":%d, \"right\":%d}')" 
-                        %(file_hash, face_id, top,left,bottom,right))
-                self.db.commit()
-
-            i=i+1
-        
-        # just testin one
-        exit(0)
-
+    '''
+    Check if we have face data
+    '''
+    def HasFaceData(self, file_hash):
+        self.dbc.execute("""SELECT HEX(file_hash) FROM file_image_face WHERE file_hash=UNHEX('%s')"""
+                %(file_hash))
+        return self.dbc.rowcount
 
     def AddFile(self, subpath_id, filename, full_filename):
         BLOCKSIZE = 65536
@@ -280,7 +375,7 @@ class ThatsVeryNAS:
         if (config.updatefilelog):
             fupdated = open(config.updatefilelog, 'a')
 
-        print("Adding %s" %(full_filename))
+#        print("Adding %s" %(full_filename))
 
         # If the filename exists but the file hash is different we need
         # to change the status on it to indicate the file exists but as a
@@ -314,54 +409,76 @@ class ThatsVeryNAS:
                     %(file_hash, subpath_id, filename, content_type, subpath_id, filename))
         self.db.commit()
         if content_type in [1,2,3]:
-            print("Image file: %s" %(full_filename))
+#            print("Image file: %s" %(full_filename))
             self.AddImageData(file_hash, full_filename)
-            self.AddFaces(file_hash, full_filename)
+            if self.HasFaceData(file_hash) == 0:
+                # launch a thread to add faces in the background
+                self.face_task_queue.put((file_hash, full_filename))
+                if self.face_background_process is None:
+                    self.face_background_process = ThatsVeryNAS_AddFaceQueue.Start(config, self.face_task_queue)
 
     def ScanPath(self,path_id):
-        print("Scanning %d" %(path_id))
-        # open a log file for skipped files if configured
-        if (config.skipfilelog):
-            if not os.path.exists(os.path.dirname(config.skipfilelog)):
-                try:
-                    os.makedirs(os.path.dirname(config.skipfilelog))
-                except OSError as exc: # Guard against race condition
-                    if exc.errno != errno.EEXIST:
-                        raise
+        try:
+            print("Scanning %d" %(path_id))
+            # open a log file for skipped files if configured
+            if (config.skipfilelog):
+                if not os.path.exists(os.path.dirname(config.skipfilelog)):
+                    try:
+                        os.makedirs(os.path.dirname(config.skipfilelog))
+                    except OSError as exc: # Guard against race condition
+                        if exc.errno != errno.EEXIST:
+                            raise
 
-            fskipped = open(config.skipfilelog, 'a')
+                fskipped = open(config.skipfilelog, 'a')
 
-        # Get given path or all paths
-        if (path_id>0):
-            self.dbc.execute("SELECT path_id,path FROM paths WHERE path_id=%d" %(path_id))
-        else:
-            self.dbc.execute("SELECT path_id,path FROM paths WHERE status='ACTIVE'")
-        paths=self.dbc.fetchall()
-        for path_id,path in paths:
-            print("%s, %s" %(path_id, path))
+            # Get given path or all paths
+            if (path_id>0):
+                self.dbc.execute("SELECT path_id,path FROM paths WHERE path_id=%d" %(path_id))
+            else:
+                self.dbc.execute("SELECT path_id,path FROM paths WHERE status='ACTIVE'")
+            paths=self.dbc.fetchall()
+            for path_id,path in paths:
+                print("%s, %s" %(path_id, path))
 
-            self.dbc.execute("SELECT subpath_id,path FROM subpaths WHERE status='ACTIVE' AND path_id=%d" %(path_id))
-            subpaths=self.dbc.fetchall()
-            for subpath_id,subpath in subpaths:
-                print("%s, %s" %(subpath_id,subpath))
+                self.dbc.execute("SELECT subpath_id,path FROM subpaths WHERE status='ACTIVE' AND path_id=%d" %(path_id))
+                subpaths=self.dbc.fetchall()
+                for subpath_id,subpath in subpaths:
+                    print("%s, %s" %(subpath_id,subpath))
 
-                # Get exclusions for the path as well as exclusions for all subpaths
-                self.dbc.execute("SELECT pattern FROM exclusions WHERE subpath_id IN (0,%d)" %(subpath_id))
-                patterns=self.dbc.fetchall()
+                    # Get exclusions for the path as well as exclusions for all subpaths
+                    self.dbc.execute("SELECT pattern FROM exclusions WHERE subpath_id IN (0,%d)" %(subpath_id))
+                    patterns=self.dbc.fetchall()
 
-                for cur_path, dirs, files in os.walk(os.path.join(path, subpath)):
-                    for file in files:
-                        skip=False
-                        full_filename=os.path.join(path, subpath, cur_path, file)
-                        rel_filename=full_filename[len(path)+len(subpath)+1:]
-                        for pattern in patterns:
-                            if (re.match("%s" %(pattern), "%s" %(rel_filename)) != None):
-                                skip=True
-                                break
-                        if (skip==False):
-                            self.AddFile(subpath_id, rel_filename, full_filename)
-                        elif (fskipped):
-                            fskipped.write("Skipping: %s\n" %full_filename)
+                    for cur_path, dirs, files in os.walk(os.path.join(path, subpath)):
+                        for file in files:
+                            skip=False
+                            full_filename=os.path.join(path, subpath, cur_path, file)
+                            rel_filename=full_filename[len(path)+len(subpath)+1:]
+                            for pattern in patterns:
+                                if (re.match("%s" %(pattern), "%s" %(rel_filename)) != None):
+                                    skip=True
+                                    break
+                            if (skip==False):
+                                try:
+                                    self.AddFile(subpath_id, rel_filename, full_filename)
+                                except Exception as e:
+                                    print("Error adding file: %s" %(e))
+                                    if (fskipped):
+                                        fskipped.write("Error adding file: %s\n" %full_filename)
+                            elif (fskipped):
+                                fskipped.write("Skipping: %s\n" %full_filename)
+            # Wait for the face recognition process to finish, if it was started
+            if self.face_background_process is not None:
+                # Signal the process to stop by adding None
+                self.face_task_queue.put(None)
+
+                print("Waiting for face recognition process to finish...")
+                self.face_background_process.join()
+        except KeyboardInterrupt as e:
+            if self.face_background_process is not None:
+                self.face_task_queue.put(None)
+                print("Waiting for face recognition process to finish...")
+                self.face_background_process.join()
 
     def PrintInfo(self):
         self.dbc.execute("""SELECT
