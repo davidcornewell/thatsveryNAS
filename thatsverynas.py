@@ -285,8 +285,8 @@ class ThatsVeryNAS:
     Check if we have image metadata
     '''
     def HasImageData(self, file_hash):
-        self.dbc.execute("""SELECT HEX(file_hash) FROM file_image_metadata WHERE file_hash=UNHEX('%s')"""
-                %(file_hash))
+        self.dbc.execute("""SELECT HEX(file_hash) FROM file_image_metadata WHERE file_hash=UNHEX(%s)""",
+                (file_hash))
         return self.dbc.rowcount
     
     '''
@@ -309,7 +309,7 @@ class ThatsVeryNAS:
                     print("type {}".format(type(data)))
                     for gpskey in data:
                         decode = GPSTAGS.get(gpskey, gpskey)
-                        print("gpskey type {} = {}, {}".format(decode, type(data[gpskey]), str(data[gpskey])))
+                        #print("gpskey type {} = {}, {}".format(decode, type(data[gpskey]), str(data[gpskey])))
                         if isinstance(data[gpskey], (bytes, bytearray)):
                             gpsinfo[decode] = data[gpskey].decode()
                         elif isinstance(data[gpskey], str):
@@ -351,15 +351,16 @@ class ThatsVeryNAS:
             # Before calling json.dumps(), convert the data
             save_data = self.convert_ifd_rational(save_data)
             print("%s" % (save_data))
-            self.dbc.execute("INSERT INTO file_image_metadata SET file_hash=UNHEX('%s'), image_metadata='%s'" % (file_hash, json.dumps(save_data)))
+            self.dbc.execute("INSERT INTO file_image_metadata SET file_hash=UNHEX(%s), image_metadata=%s",
+                (file_hash, json.dumps(save_data)))
             self.db.commit()
 
     '''
     Check if we have face data
     '''
     def HasFaceData(self, file_hash):
-        self.dbc.execute("""SELECT HEX(file_hash) FROM file_image_face WHERE file_hash=UNHEX('%s')"""
-                %(file_hash))
+        self.dbc.execute("""SELECT HEX(file_hash) FROM file_image_face WHERE file_hash=UNHEX(%s)""",
+                (file_hash))
         return self.dbc.rowcount
 
     def AddFile(self, subpath_id, filename, full_filename):
@@ -381,32 +382,32 @@ class ThatsVeryNAS:
         # to change the status on it to indicate the file exists but as a
         # different hash
         self.dbc.execute("""SELECT HEX(file_hash) FROM files
-                WHERE subpath_id=%d AND filename='%s' AND file_hash!=UNHEX('%s')"""
-                %(subpath_id, filename, file_hash))
+                WHERE subpath_id=%d AND filename=%s AND file_hash!=UNHEX(%s)""",
+                (subpath_id, filename, file_hash))
         if (self.dbc.rowcount > 0):
             row=self.dbc.fetchone()
             if (fupdated):
                 fupdated.write("UPDATING file: %s (%s != %s)\n" %(filename,
                     file_hash, row[0]))
             self.dbc.execute("""UPDATE files SET status='UPDATED' WHERE
-                    file_hash=UNHEX('%s')""" %(row[0]))
+                    file_hash=UNHEX(%s)""", (row[0]))
 
         content_type=self.GetContentTypeFromFile(full_filename)
 
         # Insert the file. if the hash exists, update path and filename
         # if it moved. Add a file duplicate if they both exist
         self.dbc.execute("""SELECT HEX(file_hash) FROM files
-                WHERE file_hash=UNHEX('%s')"""
-                %(file_hash))
+                WHERE file_hash=UNHEX(%s)""",
+                (file_hash))
         if (self.dbc.rowcount > 0):
             self.dbc.execute("""INSERT INTO file_duplicates
-                    SET file_hash=UNHEX('%s'), subpath_id=%d, filename='%s'"""
-                    %(file_hash, subpath_id, filename))
+                    SET file_hash=UNHEX(%s), subpath_id=%d, filename=%s""",
+                    (file_hash, subpath_id, filename))
         else:
             self.dbc.execute("""INSERT INTO files
-                    SET file_hash=UNHEX('%s'), subpath_id=%d, filename='%s', content_type=%d
-                    ON DUPLICATE KEY UPDATE subpath_id=%d, filename='%s'"""
-                    %(file_hash, subpath_id, filename, content_type, subpath_id, filename))
+                    SET file_hash=UNHEX(%s), subpath_id=%d, filename=%s, content_type=%d
+                    ON DUPLICATE KEY UPDATE subpath_id=%d, filename=%s""",
+                    (file_hash, subpath_id, filename, content_type, subpath_id, filename))
         self.db.commit()
         if content_type in [1,2,3]:
 #            print("Image file: %s" %(full_filename))

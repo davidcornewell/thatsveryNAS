@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS files (
    modified_dt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
    status ENUM ('PENDING','TRACKED','REMOVED','UPDATED') NOT NULL DEFAULT 'TRACKED',
    INDEX path_file (subpath_id, filename),
-   FULLTEXT INDEX filename (filename)
+   FULLTEXT INDEX filename (filename),
+   INDEX status (status,content_type)
 );
 
 -- Duplicate files where the hash is the same, but file is location somewhere else
@@ -65,7 +66,8 @@ CREATE TABLE IF NOT EXISTS file_image_metadata (
    file_hash BINARY(32) NOT NULL,
    image_metadata JSON,
    `taken_dt` DATETIME GENERATED ALWAYS AS (STR_TO_DATE((JSON_VALUE(image_metadata , '$.DateTime')), '%Y-%m-%d %T')) PERSISTENT, 
-   INDEX taken_dt (taken_dt)
+   INDEX taken_dt (taken_dt),
+   KEY file_hash (file_hash)
 );
 
 CREATE TABLE IF NOT EXISTS people (
