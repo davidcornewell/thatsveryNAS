@@ -1,16 +1,15 @@
 #!/usr/bin/python3
 
 import pystache
-import cgi
+import os
+import urllib.parse
 import config
 from thatsverynas import ThatsVeryNAS
-# debug
-import cgitb
-cgitb.enable()
 
-form = cgi.FieldStorage()
-page = form.getvalue('page')
-ajax = form.getvalue('ajax')
+query_string = os.environ.get('QUERY_STRING', '')
+params = urllib.parse.parse_qs(query_string)
+page = params.get('page', [None])[0]
+ajax = params.get('ajax', [None])[0]
 
 print("Content-Type: text/html\r\n\r\n")
 
@@ -18,9 +17,11 @@ tvnas = ThatsVeryNAS(config)
 renderer = pystache.Renderer()
 
 if ajax == "savesubpath":
-   tvnas.AddSubPath(form.getvalue('path_id'), form.getvalue('path'))
+   path_id = params.get('path_id', [None])[0]
+   path = params.get('path', [None])[0]
+   tvnas.AddSubPath(path_id, path)
    
-   print(renderer.render_path('templates/addedsubpath.mustache', {'path': form.getvalue('path')}))
+   print(renderer.render_path('templates/addedsubpath.mustache', {'path': path}))
 
 else:
    print(renderer.render_path('templates/start.mustache', {'page': ''}))

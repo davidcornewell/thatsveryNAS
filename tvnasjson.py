@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 
 import json
-import cgi
-import cgitb; cgitb.enable()
+import os
+import urllib.parse
 from datetime import datetime
 import config
 from thatsverynas import ThatsVeryNAS
@@ -15,17 +15,18 @@ class DateTimeEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, o)
 
 tvnas = ThatsVeryNAS(config)
-form_data = cgi.FieldStorage()
+query_string = os.environ.get('QUERY_STRING', '')
+params = urllib.parse.parse_qs(query_string)
 
 searchopts = {
-   "filename": form_data.getfirst('filename'),
-   "status": "", #form_data.getfirst('status'),
-   "types": form_data.getlist('types'),
-   "mainsearch": form_data.getfirst('mainsearch'),
-   "date_from": form_data.getfirst('date_from'),  # YYYY-MM-DD
-   "date_to": form_data.getfirst('date_to'),      # YYYY-MM-DD
-   "min_faces": form_data.getfirst('min_faces', '0'),  # minimum number of faces
-   "on_this_day": form_data.getfirst('on_this_day') == 'true'  # show photos from this day in all years
+   "filename": params.get('filename', [None])[0],
+   "status": "", #params.get('status', [''])[0],
+   "types": params.get('types', []),
+   "mainsearch": params.get('mainsearch', [None])[0],
+   "date_from": params.get('date_from', [None])[0],  # YYYY-MM-DD
+   "date_to": params.get('date_to', [None])[0],      # YYYY-MM-DD
+   "min_faces": params.get('min_faces', ['0'])[0],  # minimum number of faces
+   "on_this_day": params.get('on_this_day', [''])[0] == 'true'  # show photos from this day in all years
 }
 
 #if form_data.getfirst('path_id'):

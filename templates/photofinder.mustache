@@ -220,12 +220,28 @@
     align-items: center;
     justify-content: center;
     min-height: 300px;
+    position: relative;
+}
+
+.image-display img {
+    max-width: 100%;
+    max-height: 600px;
+    object-fit: contain;
+    display: block;
+    border-radius: 4px;
 }
 
 .image-display canvas {
+    position: absolute;
     max-width: 100%;
-    max-height: 100%;
+    max-height: 600px;
     border-radius: 4px;
+    cursor: pointer;
+    display: none;
+}
+
+.image-display canvas.show {
+    display: block;
 }
 
 .image-details {
@@ -331,7 +347,8 @@ class PhotoFinder {
     constructor() {
         this.allPhotos = [];
         this.filteredPhotos = [];
-        this.showFaceBoxes = true;
+        this.showFaceBoxes = false;  // Don't show face boxes on gallery
+        this.currentModalPhoto = null;
         this.init();
     }
 
@@ -591,7 +608,43 @@ class PhotoFinder {
             jQuery('#modalImageDisplay').html('<p style="color: red; padding: 20px;">Failed to load image</p>');
         });
 
-        jQuery('#modalImageDisplay').html('').append(imgElement);
+        // Create overlay canvas for face boxes
+        const faceCanvas = jQuery('<canvas></canvas>');
+        faceCanvas.css({
+            'position': 'absolute',
+            'max-width': '100%',
+            'max-height': '600px',
+            'cursor': 'pointer'
+        });
+
+        const displayDiv = jQuery('#modalImageDisplay');
+        displayDiv.html('').css('position', 'relative').append(imgElement);
+
+        // Load image and set up face box canvas
+        const img = new Image();
+        img.src = photo.src;
+        img.onload = () => {
+            // Set up canvas dimensions to match image
+            const canvas = faceCanvas[0];
+            canvas.width = img.width;
+            canvas.height = img.height;
+            
+            // Store photo data for hover event
+            this.currentModalPhoto = photo;
+            
+            // Add canvas to display after image loads
+            displayDiv.append(faceCanvas);
+            
+            // Add hover event to display/hide face boxes
+            imgElement.on('mouseenter', () => {
+                this.drawFaceBoxes(canvas, photo);
+                faceCanvas.addClass('show');
+            });
+            
+            imgElement.on('mouseleave', () => {
+                faceCanvas.removeClass('show');
+            });
+        };
         jQuery('#modalTitle').html(photo.title);
         jQuery('#modalImageDetails').html(detailsHtml);
         jQuery('#photoModal').addClass('active');
@@ -599,6 +652,7 @@ class PhotoFinder {
 
     closeModal() {
         jQuery('#photoModal').removeClass('active');
+        this.currentModalPhoto = null;  // Clear face box canvas when closing
     }
 
     escapeHtml(text) {
