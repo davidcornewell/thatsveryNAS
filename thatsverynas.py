@@ -15,6 +15,11 @@ import magic
 import hashlib
 import face_recognition
 import multiprocessing
+import warnings
+
+# Increase PIL's max image size limit to avoid decompression bomb warnings
+# Set to 0 for unlimited (be careful with untrusted sources)
+Image.MAX_IMAGE_PIXELS = 500000000  # ~500 megapixels
 
 import multiprocessing
 import face_recognition
@@ -30,6 +35,9 @@ class ThatsVeryNAS_AddFaceQueue:
             "user": config.dbuser,
             "passwd": config.dbpass,
             "db": config.dbname,
+            "connect_timeout": 300,  # 5 minutes connection timeout
+            "read_timeout": 600,     # 10 minutes read timeout
+            "write_timeout": 600     # 10 minutes write timeout
         }
         self.connect_to_db()
 
@@ -120,7 +128,10 @@ class ThatsVeryNAS:
         self.db = MySQLdb.connect(host=config.dbhost,      # your host, usually localhost
                      user=config.dbuser,      # your username
                      passwd=config.dbpass,    # your password
-                     db=config.dbname)        # name of the data base
+                     db=config.dbname,        # name of the data base
+                     connect_timeout=300,     # 5 minutes connection timeout
+                     read_timeout=600,        # 10 minutes read timeout
+                     write_timeout=600)       # 10 minutes write timeout
         self.dbc = self.db.cursor()
         self.addpath_stored="INSERT INTO paths (path) VALUES (%s)"
         self.addsubpath_stored="INSERT INTO subpaths (path_id,path) VALUES (%s,%s)"
@@ -167,8 +178,7 @@ class ThatsVeryNAS:
         LEFT JOIN subpaths sp ON sp.subpath_id=f.subpath_id
         LEFT JOIN paths p ON p.path_id=sp.path_id 
         LEFT JOIN content_types ct ON ct.content_type=f.content_type
-        WHERE f.status=%s 
-        GROUP BY f.file_hash'''
+        WHERE f.status=%s'''
         params=[options["status"] if len(options["status"])>0 else "TRACKED"]
 
         if isinstance(options["filename"], str) and len(options["filename"])>0:
@@ -178,6 +188,34 @@ class ThatsVeryNAS:
             placeholders = ', '.join(['%s' for _ in options["types"]])
             getfiles_generic_stored = getfiles_generic_stored + f" AND ct.description IN ({placeholders})"
             params.extend(options["types"])
+        
+        # Date range filtering
+        if options.get("on_this_day") == True:
+            # Show photos from today in all previous years
+            from datetime import datetime
+            today = datetime.now()
+            month_day = today.strftime("%m-%d")
+            getfiles_generic_stored = getfiles_generic_stored + " AND DATE_FORMAT(meta.taken_dt, '%%m-%%d') = %s"
+            params.append(month_day)
+        else:
+            # Date range filtering
+            if options.get("date_from"):
+                getfiles_generic_stored = getfiles_generic_stored + " AND DATE(meta.taken_dt) >= %s"
+                params.append(options["date_from"])
+            if options.get("date_to"):
+                getfiles_generic_stored = getfiles_generic_stored + " AND DATE(meta.taken_dt) <= %s"
+                params.append(options["date_to"])
+        
+        # Face count filtering
+        min_faces = int(options.get("min_faces", 0))
+        if min_faces > 0:
+            getfiles_generic_stored = getfiles_generic_stored + """ AND (
+                SELECT COUNT(*) FROM file_image_face fif2 
+                WHERE fif2.file_hash = f.file_hash AND fif2.face_id != 0
+            ) >= %s"""
+            params.append(min_faces)
+        
+        getfiles_generic_stored = getfiles_generic_stored + " GROUP BY f.file_hash ORDER BY meta.taken_dt DESC LIMIT 200"
  
         self.dbc.execute(getfiles_generic_stored, params)
         result={
@@ -254,6 +292,10 @@ class ThatsVeryNAS:
     '''
     def GetContentTypeFromFile(self,full_filename):
         fdesc = magic.from_file(full_filename)
+        
+        # Ensure fdesc is a string, not bytes
+        if isinstance(fdesc, bytes):
+            fdesc = fdesc.decode('utf-8')
 
         self.dbc.execute("""SELECT
                 content_type,regex_pattern
@@ -286,7 +328,7 @@ class ThatsVeryNAS:
     '''
     def HasImageData(self, file_hash):
         self.dbc.execute("""SELECT HEX(file_hash) FROM file_image_metadata WHERE file_hash=UNHEX(%s)""",
-                (file_hash))
+                (file_hash,))
         return self.dbc.rowcount
     
     '''
@@ -350,7 +392,7 @@ class ThatsVeryNAS:
 
             # Before calling json.dumps(), convert the data
             save_data = self.convert_ifd_rational(save_data)
-            print("%s" % (save_data))
+            print(str(save_data))
             self.dbc.execute("INSERT INTO file_image_metadata SET file_hash=UNHEX(%s), image_metadata=%s",
                 (file_hash, json.dumps(save_data)))
             self.db.commit()
@@ -360,7 +402,7 @@ class ThatsVeryNAS:
     '''
     def HasFaceData(self, file_hash):
         self.dbc.execute("""SELECT HEX(file_hash) FROM file_image_face WHERE file_hash=UNHEX(%s)""",
-                (file_hash))
+                (file_hash,))
         return self.dbc.rowcount
 
     def AddFile(self, subpath_id, filename, full_filename):
@@ -382,7 +424,7 @@ class ThatsVeryNAS:
         # to change the status on it to indicate the file exists but as a
         # different hash
         self.dbc.execute("""SELECT HEX(file_hash) FROM files
-                WHERE subpath_id=%d AND filename=%s AND file_hash!=UNHEX(%s)""",
+                WHERE subpath_id=%s AND filename=%s AND file_hash!=UNHEX(%s)""",
                 (subpath_id, filename, file_hash))
         if (self.dbc.rowcount > 0):
             row=self.dbc.fetchone()
@@ -398,16 +440,16 @@ class ThatsVeryNAS:
         # if it moved. Add a file duplicate if they both exist
         self.dbc.execute("""SELECT HEX(file_hash) FROM files
                 WHERE file_hash=UNHEX(%s)""",
-                (file_hash))
+                (file_hash,))
         if (self.dbc.rowcount > 0):
             self.dbc.execute("""INSERT INTO file_duplicates
-                    SET file_hash=UNHEX(%s), subpath_id=%d, filename=%s""",
+                    SET file_hash=UNHEX(%s), subpath_id=%s, filename=%s""",
                     (file_hash, subpath_id, filename))
         else:
             self.dbc.execute("""INSERT INTO files
-                    SET file_hash=UNHEX(%s), subpath_id=%d, filename=%s, content_type=%d
-                    ON DUPLICATE KEY UPDATE subpath_id=%d, filename=%s""",
-                    (file_hash, subpath_id, filename, content_type, subpath_id, filename))
+                    SET file_hash=UNHEX(%s), subpath_id=%s, filename=%s, content_type=%s, status=%s
+                    ON DUPLICATE KEY UPDATE subpath_id=%s, filename=%s""",
+                    (file_hash, subpath_id, filename, content_type, 'TRACKED', subpath_id, filename))
         self.db.commit()
         if content_type in [1,2,3]:
 #            print("Image file: %s" %(full_filename))
@@ -421,6 +463,8 @@ class ThatsVeryNAS:
     def ScanPath(self,path_id):
         try:
             print("Scanning %d" %(path_id))
+            file_count = 0
+            skip_count = 0
             # open a log file for skipped files if configured
             if (config.skipfilelog):
                 if not os.path.exists(os.path.dirname(config.skipfilelog)):
@@ -434,20 +478,20 @@ class ThatsVeryNAS:
 
             # Get given path or all paths
             if (path_id>0):
-                self.dbc.execute("SELECT path_id,path FROM paths WHERE path_id=%d" %(path_id))
+                self.dbc.execute("SELECT path_id,path FROM paths WHERE path_id=%s", (path_id,))
             else:
                 self.dbc.execute("SELECT path_id,path FROM paths WHERE status='ACTIVE'")
             paths=self.dbc.fetchall()
             for path_id,path in paths:
                 print("%s, %s" %(path_id, path))
 
-                self.dbc.execute("SELECT subpath_id,path FROM subpaths WHERE status='ACTIVE' AND path_id=%d" %(path_id))
+                self.dbc.execute("SELECT subpath_id,path FROM subpaths WHERE status='ACTIVE' AND path_id=%s", (path_id,))
                 subpaths=self.dbc.fetchall()
                 for subpath_id,subpath in subpaths:
                     print("%s, %s" %(subpath_id,subpath))
 
                     # Get exclusions for the path as well as exclusions for all subpaths
-                    self.dbc.execute("SELECT pattern FROM exclusions WHERE subpath_id IN (0,%d)" %(subpath_id))
+                    self.dbc.execute("SELECT pattern FROM exclusions WHERE subpath_id IN (0,%s)", (subpath_id,))
                     patterns=self.dbc.fetchall()
 
                     for cur_path, dirs, files in os.walk(os.path.join(path, subpath)):
@@ -456,18 +500,26 @@ class ThatsVeryNAS:
                             full_filename=os.path.join(path, subpath, cur_path, file)
                             rel_filename=full_filename[len(path)+len(subpath)+1:]
                             for pattern in patterns:
-                                if (re.match("%s" %(pattern), "%s" %(rel_filename)) != None):
+                                if (re.match(pattern[0], rel_filename) != None):
                                     skip=True
                                     break
                             if (skip==False):
                                 try:
                                     self.AddFile(subpath_id, rel_filename, full_filename)
+                                    file_count += 1
+                                    if file_count % 10 == 0:
+                                        print("Processed {} files...".format(file_count))
                                 except Exception as e:
-                                    print("Error adding file: %s" %(e))
+                                    print("Error adding file: {}".format(e))
+                                    import traceback
+                                    traceback.print_exc()
                                     if (fskipped):
-                                        fskipped.write("Error adding file: %s\n" %full_filename)
-                            elif (fskipped):
-                                fskipped.write("Skipping: %s\n" %full_filename)
+                                        fskipped.write("Error adding file: {} ({})\n".format(full_filename, str(e)))
+                            else:
+                                skip_count += 1
+                                if (fskipped):
+                                    fskipped.write("Skipping: %s\n" %full_filename)
+            print("Scan complete: {} files processed, {} files skipped".format(file_count, skip_count))
             # Wait for the face recognition process to finish, if it was started
             if self.face_background_process is not None:
                 # Signal the process to stop by adding None
@@ -485,8 +537,9 @@ class ThatsVeryNAS:
         self.dbc.execute("""SELECT
                 p.path,GROUP_CONCAT(DISTINCT e.pattern),COUNT(f.file_hash)
                 FROM paths p
-                LEFT JOIN exclusions e ON e.path_id=p.path_id
-                LEFT JOIN files f ON f.path_id=p.path_id
+                LEFT JOIN subpaths s ON s.path_id=p.path_id
+                LEFT JOIN exclusions e ON e.subpath_id=s.subpath_id
+                LEFT JOIN files f ON f.subpath_id=s.subpath_id
                 GROUP BY p.path_id""")
         data = self.dbc.fetchall()
         for row in data :

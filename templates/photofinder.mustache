@@ -1,85 +1,616 @@
-<div id="picture_list"></div>
+<style>
+.photo-viewer-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 20px;
+}
+
+.filter-panel {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
+.filter-group {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.filter-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex: 1;
+    min-width: 200px;
+}
+
+.filter-item label {
+    font-weight: 500;
+    color: #333;
+    font-size: 14px;
+}
+
+.filter-item input,
+.filter-item select {
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.filter-buttons {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.filter-buttons button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.btn-apply {
+    background-color: #007bff;
+    color: white;
+}
+
+.btn-apply:hover {
+    background-color: #0056b3;
+}
+
+.btn-reset {
+    background-color: #6c757d;
+    color: white;
+}
+
+.btn-reset:hover {
+    background-color: #5a6268;
+}
+
+.btn-on-this-day {
+    background-color: #ff6b9d;
+    color: white;
+}
+
+.btn-on-this-day:hover {
+    background-color: #ff5a8a;
+}
+
+.photo-stats {
+    font-size: 14px;
+    color: #666;
+    padding: 10px 0;
+}
+
+.gallery-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 15px;
+    padding: 0;
+}
+
+.photo-item {
+    position: relative;
+    cursor: pointer;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+    aspect-ratio: 1;
+}
+
+.photo-item:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.photo-item canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.photo-item .photo-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 12px;
+    color: white;
+    font-size: 12px;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.7);
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.photo-item:hover .photo-overlay {
+    opacity: 1;
+    background: rgba(0,0,0,0.4);
+}
+
+.photo-overlay .photo-date {
+    font-weight: bold;
+    font-size: 13px;
+}
+
+.photo-overlay .photo-faces {
+    margin-top: 5px;
+    font-size: 11px;
+}
+
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.8);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+.modal-content {
+    position: relative;
+    background: white;
+    border-radius: 8px;
+    max-width: 90vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-header {
+    padding: 15px;
+    border-bottom: 1px solid #dee2e6;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #999;
+}
+
+.modal-close:hover {
+    color: #333;
+}
+
+.modal-body {
+    flex: 1;
+    overflow: auto;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.image-display {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+}
+
+.image-display canvas {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 4px;
+}
+
+.image-details {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.details-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.details-row:last-child {
+    border-bottom: none;
+}
+
+.details-label {
+    font-weight: 500;
+    color: #666;
+}
+
+.details-value {
+    color: #333;
+    word-break: break-all;
+}
+
+.face-list {
+    margin-top: 10px;
+}
+
+.face-list-title {
+    font-weight: 500;
+    margin-bottom: 8px;
+    color: #333;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px;
+    color: #999;
+}
+
+.empty-state-icon {
+    font-size: 48px;
+    margin-bottom: 15px;
+}
+</style>
+
+<div class="photo-viewer-container">
+    <div class="filter-panel">
+        <div class="filter-group">
+            <div class="filter-item">
+                <label for="dateFromInput">From Date:</label>
+                <input type="date" id="dateFromInput" placeholder="Start date">
+            </div>
+            <div class="filter-item">
+                <label for="dateToInput">To Date:</label>
+                <input type="date" id="dateToInput" placeholder="End date">
+            </div>
+            <div class="filter-item">
+                <label for="faceCountInput">Min Faces:</label>
+                <input type="number" id="faceCountInput" min="0" placeholder="0" value="0">
+            </div>
+            <div class="filter-buttons">
+                <button class="btn-apply" id="applyFiltersBtn">Apply Filters</button>
+                <button class="btn-reset" id="resetFiltersBtn">Reset</button>
+                <button class="btn-on-this-day" id="onThisDayBtn">🎂 On This Day</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="photo-stats">
+        <span id="photosCount">Loading photos...</span>
+    </div>
+
+    <div class="gallery-container" id="picture_list"></div>
+
+    <div class="empty-state" id="emptyState" style="display: none;">
+        <div class="empty-state-icon">📷</div>
+        <div>No photos match your filters</div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="photoModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="modalTitle">Photo Viewer</h3>
+            <button class="modal-close" id="modalCloseBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="image-display" id="modalImageDisplay"></div>
+            <div class="image-details" id="modalImageDetails"></div>
+        </div>
+    </div>
+</div>
 
 <script>
-function HighlightFaces(canvas, origW, origH, face_data) {
-    if (face_data && face_data.length && canvas.getContext) {
-        const ctx = canvas.getContext("2d");
-        const img = new Image();
-        img.src = canvas.style.backgroundImage.slice(5, -2); // Extract URL from 'background-image'
+class PhotoFinder {
+    constructor() {
+        this.allPhotos = [];
+        this.filteredPhotos = [];
+        this.showFaceBoxes = true;
+        this.init();
+    }
 
-        img.onload = function() {
-            canvas.width = img.width;
-            canvas.height = img.height;
-            ctx.drawImage(img, 0, 0);
-            
-            // Calculate scaling factors
-            const scaleX = canvas.width / origW;
-            const scaleY = canvas.height / origH;
-            
-            ctx.strokeStyle = "#ff6";
-            ctx.lineWidth = 2;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0);
-            
-            for (let i = 0; i < face_data.length; i++) {
-                const top = face_data[i].top * scaleY;
-                const left = face_data[i].left * scaleX;
-                const width = (face_data[i].right - face_data[i].left) * scaleX;
-                const height = (face_data[i].bottom - face_data[i].top) * scaleY;
-                
-                console.log(`l:${left} t:${top} w:${width} h:${height}`);
-                ctx.strokeRect(left, top, width, height);
+    init() {
+        this.loadPhotos();
+        this.attachEventListeners();
+    }
+
+    attachEventListeners() {
+        jQuery('#applyFiltersBtn').on('click', () => this.applyFilters());
+        jQuery('#resetFiltersBtn').on('click', () => this.resetFilters());
+        jQuery('#onThisDayBtn').on('click', () => this.onThisDay());
+        jQuery('#modalCloseBtn').on('click', () => this.closeModal());
+        jQuery(document).on('keydown', (e) => {
+            if (e.key === 'Escape') this.closeModal();
+        });
+    }
+
+    loadPhotos(filters = {}) {
+        // Build query string with filters
+        let queryParams = ['types=JPG', 'types=jpg'];
+        
+        if (filters.date_from) {
+            queryParams.push(`date_from=${encodeURIComponent(filters.date_from)}`);
+        }
+        if (filters.date_to) {
+            queryParams.push(`date_to=${encodeURIComponent(filters.date_to)}`);
+        }
+        if (filters.min_faces && filters.min_faces > 0) {
+            queryParams.push(`min_faces=${filters.min_faces}`);
+        }
+        if (filters.on_this_day) {
+            queryParams.push('on_this_day=true');
+        }
+        
+        const url = 'tvnasjson.py?' + queryParams.join('&');
+        
+        jQuery.ajax({
+            url: url,
+            data: null,
+            success: (result) => {
+                this.allPhotos = result.map(photo => {
+                    // Prefer DateTimeOriginal (actual taken date) from EXIF, fall back to modified_dt
+                    let dateTaken = photo.modified_dt;
+                    if (photo.image_metadata && photo.image_metadata.DateTimeOriginal) {
+                        dateTaken = photo.image_metadata.DateTimeOriginal;
+                    }
+                    
+                    return {
+                        src: 'tvnasstream.py?file_hash=' + photo.file_hash,
+                        title: photo.filename,
+                        file_hash: photo.file_hash,
+                        face_data: photo.face_data || [],
+                        image_metadata: photo.image_metadata || {},
+                        date_taken: dateTaken,
+                        faceCount: (photo.face_data && photo.face_data.length) || 0
+                    };
+                });
+                this.displayPhotos(this.allPhotos);
+                if (Object.keys(filters).length === 0) {
+                    this.populateDateInputs();
+                }
+            },
+            error: () => {
+                jQuery('#photosCount').html('Error loading photos');
             }
+        });
+    }
+
+    populateDateInputs() {
+        if (this.allPhotos.length === 0) return;
+
+        const dates = this.allPhotos
+            .map(p => p.date_taken)
+            .filter(d => d)
+            .map(d => new Date(d.replace(' ', 'T')))
+            .sort((a, b) => a - b);
+
+        if (dates.length > 0) {
+            const minDate = dates[0];
+            const maxDate = dates[dates.length - 1];
+            
+            jQuery('#dateFromInput').attr('min', this.formatDateForInput(minDate));
+            jQuery('#dateToInput').attr('max', this.formatDateForInput(maxDate));
+        }
+    }
+
+    formatDateForInput(date) {
+        return date.toISOString().split('T')[0];
+    }
+
+    applyFilters() {
+        const dateFrom = jQuery('#dateFromInput').val();
+        const dateTo = jQuery('#dateToInput').val();
+        const minFaces = parseInt(jQuery('#faceCountInput').val()) || 0;
+
+        const filters = {
+            date_from: dateFrom || null,
+            date_to: dateTo || null,
+            min_faces: minFaces
         };
+        
+        // Remove null values
+        Object.keys(filters).forEach(key => filters[key] === null && delete filters[key]);
+        
+        this.loadPhotos(filters);
+    }
+
+    resetFilters() {
+        jQuery('#dateFromInput').val('');
+        jQuery('#dateToInput').val('');
+        jQuery('#faceCountInput').val('0');
+        this.loadPhotos();
+    }
+
+    onThisDay() {
+        // Clear other filters and load "on this day" photos
+        jQuery('#dateFromInput').val('');
+        jQuery('#dateToInput').val('');
+        jQuery('#faceCountInput').val('0');
+        this.loadPhotos({ on_this_day: true });
+    }
+
+    displayPhotos(photos) {
+        const container = jQuery('#picture_list');
+        container.empty();
+
+        if (photos.length === 0) {
+            jQuery('#emptyState').show();
+            jQuery('#photosCount').html('0 photos');
+            return;
+        }
+
+        jQuery('#emptyState').hide();
+        jQuery('#photosCount').html(`${photos.length} photo${photos.length !== 1 ? 's' : ''}`);
+
+        photos.forEach((photo, index) => {
+            const photoItem = jQuery(`<div class="photo-item" data-index="${index}"></div>`);
+            const canvas = jQuery('<canvas></canvas>');
+            
+            const dateDisplay = this.formatDate(photo.date_taken);
+            const overlay = jQuery(`
+                <div class="photo-overlay">
+                    <div class="photo-date">${dateDisplay}</div>
+                    <div class="photo-faces">${photo.faceCount} face${photo.faceCount !== 1 ? 's' : ''}</div>
+                </div>
+            `);
+
+            photoItem.append(canvas);
+            photoItem.append(overlay);
+            
+            photoItem.on('click', () => this.openModal(photo));
+
+            const img = new Image();
+            img.src = photo.src;
+            img.onload = () => {
+                const ctx = canvas[0].getContext('2d');
+                canvas[0].width = img.width;
+                canvas[0].height = img.height;
+                ctx.drawImage(img, 0, 0);
+                
+                if (this.showFaceBoxes && photo.face_data && photo.face_data.length > 0) {
+                    this.drawFaceBoxes(canvas[0], photo);
+                }
+            };
+
+            container.append(photoItem);
+        });
+    }
+
+    drawFaceBoxes(canvas, photo) {
+        const ctx = canvas.getContext('2d');
+        const origW = photo.image_metadata?.ExifImageWidth || photo.original_width || canvas.width;
+        const origH = photo.image_metadata?.ExifImageHeight || photo.original_height || canvas.height;
+        const scaleX = canvas.width / origW;
+        const scaleY = canvas.height / origH;
+
+        ctx.strokeStyle = '#ffff00';
+        ctx.lineWidth = Math.max(2, canvas.width / 150);
+
+        photo.face_data.forEach(face => {
+            const top = face.top * scaleY;
+            const left = face.left * scaleX;
+            const width = (face.right - face.left) * scaleX;
+            const height = (face.bottom - face.top) * scaleY;
+            ctx.strokeRect(left, top, width, height);
+        });
+    }
+
+    formatDate(dateString) {
+        if (!dateString) return 'Unknown';
+        const date = new Date(dateString.replace(' ', 'T'));
+        return date.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'short', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+
+    openModal(photo) {
+        // Populate metadata immediately
+        let detailsHtml = `
+            <div class="details-row">
+                <span class="details-label">Filename:</span>
+                <span class="details-value">${this.escapeHtml(photo.title)}</span>
+            </div>
+            <div class="details-row">
+                <span class="details-label">Date:</span>
+                <span class="details-value">${this.formatDate(photo.date_taken || photo.file_modified)}</span>
+            </div>
+        `;
+
+        if (photo.image_metadata) {
+            if (photo.image_metadata.ExifImageWidth) {
+                detailsHtml += `
+                    <div class="details-row">
+                        <span class="details-label">Dimensions:</span>
+                        <span class="details-value">${photo.image_metadata.ExifImageWidth} × ${photo.image_metadata.ExifImageHeight}</span>
+                    </div>
+                `;
+            }
+            if (photo.image_metadata.Model) {
+                detailsHtml += `
+                    <div class="details-row">
+                        <span class="details-label">Camera:</span>
+                        <span class="details-value">${this.escapeHtml(photo.image_metadata.Model)}</span>
+                    </div>
+                `;
+            }
+        }
+
+        if (photo.face_data && photo.face_data.length > 0) {
+            detailsHtml += `
+                <div class="face-list">
+                    <div class="face-list-title">Detected Faces: ${photo.face_data.length}</div>
+                    <div class="details-row">
+                        <span class="details-label">Face boxes:</span>
+                        <span class="details-value">${photo.face_data.length} face${photo.face_data.length !== 1 ? 's' : ''} detected</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Create image element
+        const imgElement = jQuery('<img>');
+        imgElement.css({
+            'max-width': '100%',
+            'max-height': '600px',
+            'object-fit': 'contain',
+            'display': 'block',
+            'margin': '0 auto'
+        });
+        imgElement.attr('src', photo.src);
+        imgElement.on('error', () => {
+            jQuery('#modalImageDisplay').html('<p style="color: red; padding: 20px;">Failed to load image</p>');
+        });
+
+        jQuery('#modalImageDisplay').html('').append(imgElement);
+        jQuery('#modalTitle').html(photo.title);
+        jQuery('#modalImageDetails').html(detailsHtml);
+        jQuery('#photoModal').addClass('active');
+    }
+
+    closeModal() {
+        jQuery('#photoModal').removeClass('active');
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 }
 
-function DisplayPhotos(photos) {
-    var container = jQuery('#picture_list');
-    photos.forEach(photo => {
-        const canvas = jQuery('<canvas style="margin:10px; background: url(\'' + photo.src + '\') center center/ contain no-repeat;" />');
-        canvas.attr('id', photo.file_hash);
-        container.append(canvas);
-        
-        // Ensure canvas is drawn correctly after it's added to the DOM
-        canvas.on('load', function() {
-            HighlightFaces(canvas[0], photo.image_metadata.ExifImageWidth, photo.image_metadata.ExifImageHeight, photo.face_data);
-        });
-
-        // Trigger the load event manually as we are not using an actual image element
-        var img = new Image();
-        img.src = photo.src;
-        img.onload = function() {
-            canvas.trigger('load');
-        };
-    });
-}
-
-	// http	s://www.jqueryscript.net/gallery/Responsive-Photo-Viewer.html
-//	var options = {
-//		callbacks: {
-//			opened: onOpen
-//		}
-//		 appendTo: 'picture_list',
-//	};
-
-	jQuery.ajax({
-		url: 'tvnasjson.py?types=JPG&types=jpg',
-		data: null,
-		success: function (result) {
-			var photos=[];
-
-			for (var i=0; i<result.length; i++) {
-				photos.push({
-					src: 'tvnasstream.py?file_hash='+result[i].file_hash,
-					title: result[i].filename,
-					file_hash: result[i].file_hash,
-					face_data: result[i].face_data,
-					image_metadata: result[i].image_metadata
-					});
-			}
-			DisplayPhotos(photos);
-		}
-	});
+// Initialize when document is ready
+jQuery(document).ready(() => {
+    new PhotoFinder();
+});
 </script>
 

@@ -21,7 +21,11 @@ searchopts = {
    "filename": form_data.getfirst('filename'),
    "status": "", #form_data.getfirst('status'),
    "types": form_data.getlist('types'),
-   "mainsearch": form_data.getfirst('mainsearch')
+   "mainsearch": form_data.getfirst('mainsearch'),
+   "date_from": form_data.getfirst('date_from'),  # YYYY-MM-DD
+   "date_to": form_data.getfirst('date_to'),      # YYYY-MM-DD
+   "min_faces": form_data.getfirst('min_faces', '0'),  # minimum number of faces
+   "on_this_day": form_data.getfirst('on_this_day') == 'true'  # show photos from this day in all years
 }
 
 #if form_data.getfirst('path_id'):
