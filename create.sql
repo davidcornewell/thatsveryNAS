@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS files (
    filename VARCHAR(512) NOT NULL,
    content_type INT UNSIGNED NOT NULL DEFAULT 0,
    modified_dt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   size_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
    status ENUM ('PENDING','TRACKED','REMOVED','UPDATED') NOT NULL DEFAULT 'TRACKED',
    INDEX path_file (subpath_id, filename),
    FULLTEXT INDEX filename (filename),

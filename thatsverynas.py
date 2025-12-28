@@ -8,6 +8,7 @@ import errno
 import re
 import hashlib
 import json
+from datetime import datetime
 from PIL import Image, TiffImagePlugin
 from PIL.ExifTags import TAGS
 from PIL.ExifTags import GPSTAGS
@@ -158,7 +159,7 @@ class ThatsVeryNAS:
             return False
 
     def GetFile(self, file_hash):
-        getfile_generic_stored='''SELECT p.path AS `path`,sp.path AS `subpath`,f.filename,f.modified_dt,f.status,ct.description,ct.http_header 
+        getfile_generic_stored='''SELECT p.path AS `path`,sp.path AS `subpath`,f.filename,f.modified_dt,f.status,ct.description,ct.http_header,f.size_bytes
             FROM files f
             LEFT JOIN subpaths sp ON sp.subpath_id=f.subpath_id
             LEFT JOIN paths p ON p.path_id=sp.path_id 
@@ -169,7 +170,7 @@ class ThatsVeryNAS:
         
     def GetFiles(self, options):
         # add a join to get image data as face_data. In PROGRESS
-        getfiles_generic_stored='''SELECT p.path AS `path`,sp.path AS `subpath`,HEX(f.file_hash) AS `file_hash`,f.filename,f.modified_dt,f.status,ct.description, 
+        getfiles_generic_stored='''SELECT p.path AS `path`,sp.path AS `subpath`,HEX(f.file_hash) AS `file_hash`,f.filename,f.modified_dt,f.status,ct.description,f.size_bytes,
              CONCAT('[',GROUP_CONCAT(DISTINCT(fif.face_box)),']') AS `face_data`,
              image_metadata
         FROM files f
@@ -378,12 +379,25 @@ class ThatsVeryNAS:
                 elif isinstance(data, int):
                     save_data[tag] = str(data)
                 elif isinstance(data, str):
+                    # Handle EXIF datetime format (YYYY:MM:DD HH:MM:SS)
                     if re.fullmatch(r'[1-9][0-0][0-9][0-9]:[0-9][0-9]:[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9]', data):
-                        # weird data format
+                        # Convert from YYYY:MM:DD HH:MM:SS to YYYY-MM-DD HH:MM:SS
                         change = list(data)
                         change[4] = '-'
                         change[7] = '-'
                         data = "".join(change)
+                        
+                        # Validate the datetime - skip invalid dates like 0001:01:01
+                        if tag in ["DateTime", "DateTimeOriginal", "DateTimeDigitized"]:
+                            try:
+                                dt = datetime.strptime(data, '%Y-%m-%d %H:%M:%S')
+                                # Skip dates before 1700 (likely invalid default values)
+                                if dt.year < 1700:
+                                    print(f"Skipping invalid {tag}: {data}")
+                                    continue
+                            except ValueError:
+                                print(f"Invalid date format for {tag}: {data}")
+                                continue
                     save_data[tag] = data
                 elif isinstance(data, tuple):
                     save_data[tag] = [str(x) for x in data]
@@ -414,6 +428,18 @@ class ThatsVeryNAS:
                 hasher.update(buf)
                 buf = afile.read(BLOCKSIZE)
         file_hash = hasher.hexdigest()
+        
+        # Get file size in bytes
+        file_size = os.path.getsize(full_filename)
+
+        # Handle filenames with invalid UTF-8 characters (surrogates)
+        # Replace invalid characters with replacement character
+        try:
+            filename.encode('utf-8')
+        except UnicodeEncodeError:
+            filename = filename.encode('utf-8', errors='replace').decode('utf-8')
+            print(f"Warning: Filename had invalid UTF-8 characters: {filename}")
+            return
 
         if (config.updatefilelog):
             fupdated = open(config.updatefilelog, 'a')
@@ -447,9 +473,9 @@ class ThatsVeryNAS:
                     (file_hash, subpath_id, filename))
         else:
             self.dbc.execute("""INSERT INTO files
-                    SET file_hash=UNHEX(%s), subpath_id=%s, filename=%s, content_type=%s, status=%s
-                    ON DUPLICATE KEY UPDATE subpath_id=%s, filename=%s""",
-                    (file_hash, subpath_id, filename, content_type, 'TRACKED', subpath_id, filename))
+                    SET file_hash=UNHEX(%s), subpath_id=%s, filename=%s, content_type=%s, status=%s, size_bytes=%s
+                    ON DUPLICATE KEY UPDATE subpath_id=%s, filename=%s, size_bytes=%s""",
+                    (file_hash, subpath_id, filename, content_type, 'TRACKED', file_size, subpath_id, filename, file_size))
         self.db.commit()
         if content_type in [1,2,3]:
 #            print("Image file: %s" %(full_filename))
