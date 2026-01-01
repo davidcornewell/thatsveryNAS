@@ -386,7 +386,7 @@ class ThatsVeryNAS:
                         change[4] = '-'
                         change[7] = '-'
                         data = "".join(change)
-                        
+
                         # Validate the datetime - skip invalid dates like 0001:01:01
                         if tag in ["DateTime", "DateTimeOriginal", "DateTimeDigitized"]:
                             try:
@@ -394,11 +394,13 @@ class ThatsVeryNAS:
                                 # Skip dates before 1700 (likely invalid default values)
                                 if dt.year < 1700:
                                     print(f"Skipping invalid {tag}: {data}")
-                                    continue
+                                    data = None  # Mark as invalid so we don't save it
                             except ValueError:
                                 print(f"Invalid date format for {tag}: {data}")
-                                continue
-                    save_data[tag] = data
+                                data = None  # Mark as invalid so we don't save it
+
+                    if data is not None:
+                        save_data[tag] = data
                 elif isinstance(data, tuple):
                     save_data[tag] = [str(x) for x in data]
                 else:
