@@ -29,8 +29,8 @@ else:
    if page == "admin":
       paths = tvnas.GetPaths()
       print(renderer.render_path('templates/admin.mustache', {'paths': paths}))
-   elif page == "files":
-      print(renderer.render_path('templates/filesdatavis.mustache', {'page': ''}))
+   elif page == "documents":
+      print(renderer.render_path('templates/documents.mustache', {'page': ''}))
    elif page == "photos":
       print(renderer.render_path('templates/photofinder.mustache', {'page': ''}))
    else:

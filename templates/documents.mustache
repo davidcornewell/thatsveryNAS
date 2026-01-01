@@ -1,0 +1,406 @@
+<style>
+.document-browser-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 20px;
+}
+
+.filter-panel {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
+.filter-group {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.filter-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex: 1;
+    min-width: 200px;
+}
+
+.filter-item label {
+    font-weight: 500;
+    color: #333;
+    font-size: 14px;
+}
+
+.filter-item input,
+.filter-item select {
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.search-input {
+    flex: 2;
+    min-width: 300px;
+}
+
+.filter-buttons {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.filter-buttons button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.btn-apply {
+    background-color: #007bff;
+    color: white;
+}
+
+.btn-apply:hover {
+    background-color: #0056b3;
+}
+
+.btn-reset {
+    background-color: #6c757d;
+    color: white;
+}
+
+.btn-reset:hover {
+    background-color: #5a6268;
+}
+
+.documents-stats {
+    font-size: 14px;
+    color: #666;
+    padding: 10px 0;
+}
+
+.documents-table {
+    border-collapse: collapse;
+    width: 100%;
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.documents-table thead {
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    position: sticky;
+    top: 0;
+}
+
+.documents-table th {
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #333;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.documents-table th:hover {
+    background: #e9ecef;
+}
+
+.documents-table td {
+    padding: 12px;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.documents-table tbody tr:hover {
+    background: #f8f9fa;
+}
+
+.file-type {
+    display: inline-block;
+    padding: 4px 8px;
+    background: #e7f3ff;
+    color: #0056b3;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.file-size {
+    font-family: monospace;
+    color: #666;
+}
+
+.file-date {
+    color: #666;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px;
+    color: #999;
+}
+
+.empty-state-icon {
+    font-size: 48px;
+    margin-bottom: 15px;
+}
+</style>
+
+<div class="document-browser-container">
+    <div class="filter-panel">
+        <div class="filter-group">
+            <div class="filter-item search-input">
+                <label for="searchInput">Search Filename:</label>
+                <input type="text" id="searchInput" placeholder="Search documents...">
+            </div>
+            <div class="filter-item">
+                <label for="fileTypeSelect">File Type:</label>
+                <select id="fileTypeSelect">
+                    <option value="">All Types</option>
+                    <option value="PDF">PDF</option>
+                    <option value="Text">Text</option>
+                    <option value="Excel">Excel</option>
+                    <option value="Word">Word</option>
+                    <option value="ZIP">ZIP</option>
+                </select>
+            </div>
+            <div class="filter-item">
+                <label for="dateFromInput">From Date:</label>
+                <input type="date" id="dateFromInput">
+            </div>
+            <div class="filter-item">
+                <label for="dateToInput">To Date:</label>
+                <input type="date" id="dateToInput">
+            </div>
+            <div class="filter-buttons">
+                <button class="btn-apply" id="applyFiltersBtn">Apply Filters</button>
+                <button class="btn-reset" id="resetFiltersBtn">Reset</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="documents-stats">
+        <span id="documentsCount">Loading documents...</span>
+    </div>
+
+    <div style="overflow-x: auto;">
+        <table class="documents-table" id="documentsTable">
+            <thead>
+                <tr>
+                    <th>Filename</th>
+                    <th>Type</th>
+                    <th>Size</th>
+                    <th>Modified Date</th>
+                    <th>Path</th>
+                </tr>
+            </thead>
+            <tbody id="documentsBody">
+                <tr><td colspan="5" style="text-align: center; padding: 20px;">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="empty-state" id="emptyState" style="display: none;">
+        <div class="empty-state-icon">📄</div>
+        <div>No documents match your search</div>
+    </div>
+</div>
+
+<script>
+class DocumentBrowser {
+    constructor() {
+        this.allDocuments = [];
+        this.init();
+    }
+
+    init() {
+        this.loadDocuments();
+        this.attachEventListeners();
+    }
+
+    attachEventListeners() {
+        jQuery('#applyFiltersBtn').on('click', () => this.applyFilters());
+        jQuery('#resetFiltersBtn').on('click', () => this.resetFilters());
+        jQuery('#searchInput').on('keyup', (e) => {
+            // Apply filters on keyup (includes search)
+            this.applyFilters();
+        });
+    }
+
+    loadDocuments(searchTerm = '') {
+        // Load non-image file types (exclude photos)
+        const queryParams = [
+            'types=PDF', 'types=Text', 'types=Excel', 'types=Word', 
+            'types=ZIP', 'types=OpenDocument spreadsheet document',
+            'types=OpenDocument text document'
+        ];
+
+        // Add filename search if provided
+        if (searchTerm) {
+            queryParams.push('filename=' + encodeURIComponent(searchTerm));
+        }
+
+        const url = 'tvnasjson.py?' + queryParams.join('&');
+        
+        jQuery.ajax({
+            url: url,
+            data: null,
+            success: (result) => {
+                // Map the results (already sorted by server: most recent first)
+                this.allDocuments = result
+                    .map(file => ({
+                        filename: file.filename,
+                        file_hash: file.file_hash,
+                        description: file.description || 'Unknown',
+                        modified_dt: file.modified_dt,
+                        path: file.path + '/' + file.subpath,
+                        size_bytes: file.size_bytes || 0
+                    }));
+                
+                this.displayDocuments(this.allDocuments);
+            },
+            error: () => {
+                jQuery('#documentsCount').html('Error loading documents');
+            }
+        });
+    }
+
+    formatFileSize(bytes) {
+        if (bytes === 0 || !bytes) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
+    }
+
+    formatDate(dateString) {
+        if (!dateString) return 'Unknown';
+        const date = new Date(dateString.replace(' ', 'T'));
+        return date.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'short', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+
+    applyFilters() {
+        const searchTerm = jQuery('#searchInput').val();
+        const fileType = jQuery('#fileTypeSelect').val();
+        const dateFrom = jQuery('#dateFromInput').val();
+        const dateTo = jQuery('#dateToInput').val();
+
+        // Build query params
+        const queryParams = [
+            'types=PDF', 'types=Text', 'types=Excel', 'types=Word', 
+            'types=ZIP', 'types=OpenDocument spreadsheet document',
+            'types=OpenDocument text document'
+        ];
+
+        // Add search to server request
+        if (searchTerm) {
+            queryParams.push('filename=' + encodeURIComponent(searchTerm));
+        }
+
+        // Add date filters
+        if (dateFrom) {
+            queryParams.push('date_from=' + encodeURIComponent(dateFrom));
+        }
+        if (dateTo) {
+            queryParams.push('date_to=' + encodeURIComponent(dateTo));
+        }
+
+        const url = 'tvnasjson.py?' + queryParams.join('&');
+
+        jQuery.ajax({
+            url: url,
+            data: null,
+            success: (result) => {
+                // Map the results
+                let filtered = result.map(file => ({
+                    filename: file.filename,
+                    file_hash: file.file_hash,
+                    description: file.description || 'Unknown',
+                    modified_dt: file.modified_dt,
+                    path: file.path + '/' + file.subpath,
+                    size_bytes: file.size_bytes || 0
+                }));
+
+                // Client-side filter by file type (if specified and not already filtered by server)
+                if (fileType) {
+                    filtered = filtered.filter(f => f.description.toUpperCase().includes(fileType.toUpperCase()));
+                }
+
+                this.displayDocuments(filtered);
+            },
+            error: () => {
+                jQuery('#documentsCount').html('Error applying filters');
+            }
+        });
+    }
+
+    resetFilters() {
+        jQuery('#searchInput').val('');
+        jQuery('#fileTypeSelect').val('');
+        jQuery('#dateFromInput').val('');
+        jQuery('#dateToInput').val('');
+        this.displayDocuments(this.allDocuments);
+    }
+
+    displayDocuments(documents) {
+        const tbody = jQuery('#documentsBody');
+        tbody.empty();
+
+        if (documents.length === 0) {
+            jQuery('#emptyState').show();
+            jQuery('#documentsCount').html('0 documents');
+            tbody.html('<tr><td colspan="5" class="empty-state">No documents match your search</td></tr>');
+            return;
+        }
+
+        jQuery('#emptyState').hide();
+        jQuery('#documentsCount').html(`${documents.length} document${documents.length !== 1 ? 's' : ''}`);
+
+        documents.forEach(doc => {
+            const row = jQuery(`
+                <tr>
+                    <td><strong>${this.escapeHtml(doc.filename)}</strong></td>
+                    <td><span class="file-type">${this.escapeHtml(doc.description)}</span></td>
+                    <td class="file-size">${this.formatFileSize(doc.size_bytes)}</td>
+                    <td class="file-date">${this.formatDate(doc.modified_dt)}</td>
+                    <td style="font-size: 13px; color: #666;">${this.escapeHtml(doc.path)}</td>
+                </tr>
+            `);
+            tbody.append(row);
+        });
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+}
+
+// Initialize when document is ready
+jQuery(document).ready(() => {
+    new DocumentBrowser();
+});
+</script>
+
+
